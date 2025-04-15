@@ -105,15 +105,30 @@ async function main() {
     botStr: screenSize < 926 ? '保持良好的驾驶习惯，遵守交通规则' : '保持良好驾驶习惯，务必遵守交通规则'
   };
   
-  const initSettings = () => {
-    const settings = DEFAULT;
-    module.writeSettings(settings);
-    return settings;
-  };
-  
-  const settings = fm.fileExists(settingPath) 
-    ? module.getSettings() 
-    : initSettings();
+const initSettings = () => {
+  const settings = DEFAULT;
+  module.writeSettings(settings);
+  return settings;
+};
+
+const getSettings = () => {
+  try {
+    if (fm.fileExists(settingPath)) {
+      const content = fm.readString(settingPath);
+      if (content.trim() === '') {
+        console.log('Setting file is empty, initializing with defaults');
+        return initSettings();
+      }
+      return JSON.parse(content);
+    } else {
+      console.log('Setting file does not exist, initializing with defaults');
+      return initSettings();
+    }
+  } catch (e) {
+    console.log('Error reading settings: ' + e);
+    return initSettings();
+  }
+};
   
   /**
    * 检查并下载远程依赖文件
