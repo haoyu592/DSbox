@@ -8,7 +8,7 @@ async function main() {
   const updateDate = '2024年12月05日'
   const pathName = '95du_12123';
   
-  const rootUrl = 'https://raw.githubusercontent.com/95du/scripts/master';
+  const rootUrl = 'https://raw.githubusercontent.com/95du/scripts/e4e0373bc08cc79db55a7aba52c85ab7770632e2';
   const scrUrl = '${rootUrl}/api/web_12123.js';
   
   /**
