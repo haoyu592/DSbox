@@ -12,33 +12,33 @@ async function main(family) {
   const fm = FileManager.local();  
   const depPath = fm.joinPath(fm.documentsDirectory(), '95du_module');
   const isDev = false
-  
+
   if (typeof require === 'undefined') require = importModule;
   const { _95du } = require(isDev ? './_95du' : `${depPath}/_95du`);
-  
+
   const pathName = '95du_12123';
   const module = new _95du(pathName);  
   const setting = module.settings;
-  
+
   const { 
     rootUrl,
     settingPath, 
     cacheImg, 
     cacheStr,
   } = module;
-  
+
   /**
    * 读取储存的设置
    * @param {string} file - JSON
    * @returns {object} - JSON
    */
   const { myPlate, setPadding, carImg, carTop, carBot, carLead, carTra } = setting || {};
-  
+
   const { apiUrl, productId, version, api0, api1, api2, api3, api4, api5, alipayUrl, statusUrl, queryDetailUrl, detailsUrl, maybach } = await module.getCacheData(`${rootUrl}/update/12123.json`);  
-  
+
   // 获取随机数组元素
   const getRandomItem = (array) => array[Math.floor(Math.random() * array.length)] || null;
-  
+
   /**
    * 获取车辆图片并使用缓存
    * @param {string} File Extension
@@ -49,17 +49,17 @@ async function main(family) {
     const randomImg = module.getRandomItem(maybach);
     return await module.getCacheData(randomImg);
   };
-  
+
   /**
    * Get boxjs Data
    * 依赖：Quantumult-X / Surge
    */
   const getBoxjsData = async () => {
-    const { verifyToken, sign } = await module.boxjsData('body_12123') || {};
+    const { verifyToken, sign } = await module.boxjsData('body_12123') || {} || null;
     if (setting.sign !== sign) module.writeSettings({ ...setting, sign, verifyToken });
     return { verifyToken, sign };
   };
-    
+
   /**
    * 获取缓存字符串
    * @param {string} api
@@ -75,7 +75,7 @@ async function main(family) {
     if (response.success) cache.write(name, response);
     return response;
   };
-  
+
   /**
    * 发送请求获取信息
    *
@@ -90,7 +90,7 @@ async function main(family) {
     const response = await module.apiRequest(apiUrl, {}, 'POST', null, formBody);
     return response;
   };
-  
+
   // 获取违章对应的违法行为信息  
   const getSurveils = async (vioList, issueData) => {
     const params = {
@@ -100,11 +100,11 @@ async function main(family) {
     };
     // 刷新查询页面
     if (setting.details) requestInfo(api3, params);
-    
+
     const surveils = await getCacheString(`${vioList.plateNumber}_surveils.json`, api3, params);
     return surveils.success ? surveils.data?.surveils : [];
   };
-  
+
   // 获取违章对应的发证机关信息
   const getIssueData = async (vioList) => {
     const params = {
@@ -120,7 +120,7 @@ async function main(family) {
       deleteJsonFiles(cacheStr);
     }
   };
-  
+
   // 获取车辆违章信息
   const getVehicleViolation = async (vioList) => {
     const issueData = await getIssueData(vioList) || {};
@@ -131,7 +131,7 @@ async function main(family) {
     };
     return { vioList, detail };
   };
-  
+
   // 查询主函数
   const vioQueryMain = async () => {
     const main = await getCacheString('main.json', api1);
@@ -144,38 +144,38 @@ async function main(family) {
     const vioDetails = await getVehicleViolation(randomData);
     return vioDetails;
   };
-  
+
   // 处理错误
   const handleError = async (response) => {
     const { errorCode, resultCode, resultMsg } = response;
     const code = ['B100501', 'AUTHENTICATION_CREDENTIALS_NOT_EXIST', 'SECURITY_INFO_ABNORMAL', 'SYSTEM_ERROR'];
-  
+
     if (code.includes(resultCode) || code.includes(errorCode)) {
       module.notify(`${resultMsg} ⚠️`, '点击【通知框】或【车图】跳转到支付宝12123页面重新获取，请确保已打开辅助工具', alipayUrl);
     } else {
       module.notify(resultCode, resultMsg);
     };
-    
+
     if (setting.sign) {
       delete setting.sign;
       module.writeSettings(setting);
     }
   };
-  
+
   // 违章状态处理  
   const deleteJsonFiles = (path) => {
     fm.listContents(path)
       .filter(item => item.toLowerCase().endsWith('.json'))
       .forEach(file => fm.remove(fm.joinPath(path, file)));
   };
-  
+
   // 违章变动通知
   const newViolation = (surveils, plate, count) => {
     setting.count = count;
     module.writeSettings(setting);
-    
+
     const { violationTime, violationAddress, violationDescribe, fine } = surveils[0] || {};
-        
+
     const creationDate = fm.creationDate(settingPath);
     const isInitialized = (Date.now() - creationDate.getTime() > 300000);  
     if (isInitialized) {
@@ -184,7 +184,7 @@ async function main(family) {
       deleteJsonFiles(cacheStr);
     }
   };
-  
+
   // 生成跳转页面参数
   const generateParams = (jumpUrl, params) => {
     return jumpUrl + Object.entries(params).map(([key, value]) => {
@@ -195,7 +195,7 @@ async function main(family) {
     .replace(/=/g, encodeURIComponent('='))
     .replace(/[!*()']/g, char => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);  
   };
-  
+
   // 跳转违章详情页面，包含违章图片
   const violationDetailsUrl = ({ plateNumber, internalOrder } = vioList || {}, detail) => {
     const params = {
@@ -207,7 +207,7 @@ async function main(family) {
     const vioDetailsUrl = generateParams(detailsUrl, params);
     return vioDetailsUrl;
   };
-  
+
   // 每24小时更新一次
   const againWrite = (data) => {
     const modificationDate = fm.modificationDate(settingPath);
@@ -218,26 +218,26 @@ async function main(family) {
       module.writeSettings(setting);
     }
   };
-  
+
   // 驾驶证/车辆信息
   const userIntegrationQuery = async () => {
     const integral = await getCacheString('userIntegrationQuery.json', api0, params = {});
     if (integral.success) againWrite(integral.data);
     return integral.success ? integral.data : setting.integral;
   };
-  
+
   // 调用违章查询函数
   const { success = true, vioList, detail } = await vioQueryMain();
   const nothing = success && !vioList
   const sta = nothing || !success;
-  
+
   // 车辆信息，驾驶证信息
   const { drivingLicense = {}, othersVehicles = [], vehicles = [] } = await userIntegrationQuery() || {};  
-    
+
   const vehicle = vehicles.length && othersVehicles.length 
     ? (Math.random() < 0.5 ? othersVehicles : vehicles)
     : (othersVehicles.length ? othersVehicles : vehicles);
-    
+
   const {
     plateNumber, 
     issueOrganization, 
@@ -245,7 +245,7 @@ async function main(family) {
     name,
     validPeriodEnd = '2099-12-30' 
   } = getRandomItem(vehicle) || {};
-  
+
   const {
     status,
     cumulativePoint = '0', 
@@ -259,16 +259,16 @@ async function main(family) {
   // 驾驶证状态
   const isStatus = status === 'A' 
     ? '正常' : '异常';
-    
+
   const staColor = nothing 
     ? Color.blue() 
     : !success 
       ? new Color('#FF6800') 
       : new Color('#D30000');
-  
+
   const textColor = Color.dynamic(new Color(setting.textLightColor), new Color(setting.textDarkColor));
   const _textColor = Color.dynamic(new Color(setting.smallLightColor || '#000000'), new Color(setting.smallDarkColor || '#FFFFFF'));
-  
+
   // 设置组件背景
   const setBackground = async (widget) => {
     const bgImage = fm.joinPath(cacheImg, Script.name());
@@ -276,11 +276,27 @@ async function main(family) {
       const shadowImg = fm.readImage(bgImage);
       widget.backgroundImage = await module.shadowImage(shadowImg);
     } else {
-      widget.backgroundGradient = module.createGradient();
+      const gradient = new LinearGradient();
+      const color = setting.gradient.length > 0 ? setting.gradient : [setting.rangeColor];
+      const randomColor = getRandomItem(color);
+      // 渐变角度
+      const angle = setting.angle;
+      const radianAngle = ((360 - angle) % 360) * (Math.PI / 180);
+      const x = 0.5 + 0.5 * Math.cos(radianAngle);
+      const y = 0.5 + 0.5 * Math.sin(radianAngle);
+      gradient.startPoint = new Point(1 - x, y);
+      gradient.endPoint = new Point(x, 1 - y);
+      
+      gradient.locations = [0, 1];
+      gradient.colors = [
+        new Color(randomColor, Number(setting.transparency)),
+        new Color('#00000000')
+      ];
+      widget.backgroundGradient = gradient;  
       widget.backgroundColor = new Color(setting.solidColor);
     }
   };
-  
+
   //=========> Create <=========//
   const addIcon = (stack, iconName, iconColor, size, gap) => {
     const barIcon = SFSymbol.named(iconName);
@@ -289,21 +305,21 @@ async function main(family) {
     icon.tintColor = iconColor;
     stack.addSpacer(gap);
   };
-  
+
   const addText = ({ stack, iconName, iconColor, text, gap, iconGap }) => {
     const iconStack = stack.addStack();
     iconStack.layoutHorizontally();
     iconStack.centerAlignContent();
-    
+
     if (iconName) addIcon(iconStack, iconName, iconColor, 15, iconGap);
-    
+
     const dataText = iconStack.addText(text);
     dataText.font = Font.mediumSystemFont(11.5);
     dataText.textColor = textColor;
     dataText.textOpacity = 0.78;
     if (!gap) stack.addSpacer(3);
   };
-  
+
   // Two stack bar 
   const addBarStack = ({ leftStack, borderColor, iconName = 'server.rack', iconColor, text, textColor, textOpacity, gap }) => {
     const barStack = leftStack.addStack();
@@ -314,9 +330,9 @@ async function main(family) {
     barStack.cornerRadius = 10;
     barStack.borderColor = borderColor;
     barStack.borderWidth = 2;
-    
+
     if (iconName) addIcon(barStack, iconName, iconColor, 16, 4);
-    
+
     const statusText = barStack.addText(text);
     statusText.font = Font.mediumSystemFont(14);
     statusText.textColor = textColor;
@@ -325,7 +341,7 @@ async function main(family) {
     barStack.url = statusUrl;
     return barStack;
   };
-  
+
   /**
    * @param {image} image
    * @param {string} text
@@ -335,32 +351,32 @@ async function main(family) {
     const widget = new ListWidget();
     await setBackground(widget);
     widget.setPadding(setPadding, 15, setPadding, 15);
-    
+
     const topStack = widget.addStack();
     topStack.setPadding(0, 0, 3, 0);
     topStack.layoutHorizontally();
     topStack.centerAlignContent();
-    
+
     const plateText = topStack.addText(myPlate);
     plateText.font = Font.mediumSystemFont(19.5);
     plateText.textColor = new Color(setting.titleColor);
     topStack.addSpacer();
-    
+
     const logoText = topStack.addText('12123');
     logoText.font = Font.mediumSystemFont(18);
     logoText.textColor = new Color(setting.logoColor || '#0061FF')
     logoText.url = 'tmri12123://';
-    
+
     // mainStack
     const mainStack = widget.addStack();
     mainStack.layoutHorizontally();
     mainStack.centerAlignContent();
-    
+
     const leftStack = mainStack.addStack();
     leftStack.size = new Size(setting.lrfeStackWidth, 0);
     leftStack.setPadding(0, 0, 3, 0);
     leftStack.layoutVertically();
-    
+
     addText({
       stack: leftStack, 
       iconName: sta ? 'car.circle' : 'shoeprints.fill',   
@@ -368,7 +384,7 @@ async function main(family) {
       text: sta ? `准驾车型 ${allowToDrive}` : `未处理违法 ${vioList.count} 条`,
       iconGap: sta ? 15 : 4.8
     });
-    
+
     addText({
       stack: leftStack,
       text: sta ? `换证  ${validityEnd}` : `罚款${detail.fine}元   扣${detail.violationPoint}分`
@@ -379,9 +395,9 @@ async function main(family) {
       text: sta ? `年检  ${validPeriodEnd}` : detail.violationTime,  
       gap: false
     });
-    
+
     leftStack.addSpacer();
-    
+
     addBarStack({
       leftStack,
       borderColor: staColor,
@@ -391,7 +407,7 @@ async function main(family) {
       textColor: staColor,
       gap: 8
     });
-    
+
     addBarStack({
       leftStack,
       borderColor: new Color('#AB47BC'),
@@ -401,51 +417,51 @@ async function main(family) {
       textColor,
       textOpacity: 0.75
     });
-    
+
     // rightStack
     const rightStack = mainStack.addStack();
     rightStack.layoutVertically();
-    
+
     const carStack = rightStack.addStack();
     carStack.setPadding(carImg ? carTop : -25, carLead, carImg ? carBot : 0, carTra);
     carStack.size = new Size(setting.carStackWidth, 0);
-    
+
     if (setting.carImg) {
       const name = setting.carImg.split('/').pop();
       vehicleImg = await module.getCacheData(setting.carImg);
     } else {
       vehicleImg = await getRandomImage() || await module.getCacheData(module.getRandomItem(maybach));
     };
-    
+
     const imageCar = carStack.addImage(vehicleImg);
     imageCar.url = alipayUrl;
     rightStack.addSpacer();
-    
+
     const tipsStack = rightStack.addStack();
     tipsStack.size = new Size(setting.bottomSize, 28);
-    
+
     if (success && detail) {
       const shortText = `${detail.violationAddress}，${detail.violationDescribe}`;
       violationMessage = shortText.length <= 19 
       ? `${shortText}，违章序列号 ${detail.violationSerialNumber}` 
       : shortText;
     };
-    
+
     const tipsText = tipsStack.addText(sta ? (`备案信息: ${name || myName}，驾驶证状态 (${isStatus})，${issueOrganizationName}`) : violationMessage);
     tipsText.font = Font.mediumSystemFont(11);
     tipsText.textColor = textColor;
     tipsText.textOpacity = 0.8;
     tipsText.centerAlignText();
-    
+
     // 跳转查询违章/违章详情
     const param = getRandomItem(vehicle) || {};  
     const queryDetailsUrl = generateParams(queryDetailUrl, param)
     plateText.url = queryDetailsUrl;
     tipsText.url = (setting.details && success && detail) ? violationDetailsUrl(vioList, detail) : queryDetailsUrl;
-    
+
     return widget;
   };
-  
+
   /**-------------------------**/
   const getLayout = (scr = Device.screenSize().height) => ({
     padding: scr < 926 ? 13 : 18,
@@ -453,14 +469,14 @@ async function main(family) {
     barSize: scr < 926 ? 35 : 36,
     gap: scr < 926 ? 8 : 10,
   });
-  
+
   const generateStack = (widget) => {
     const leftBarStack = widget.addStack();
     leftBarStack.layoutHorizontally();
     leftBarStack.centerAlignContent();
     return leftBarStack;
   }
-  
+
   const createBarStack = (stack, width, height, color, gap) => {
     const columnStack = stack.addStack();
     columnStack.size = new Size(width, height);
@@ -468,26 +484,26 @@ async function main(family) {
     columnStack.backgroundColor = new Color(color);
     stack.addSpacer(gap);
   };
-  
+
   const addHorizontalText = (stack, text, font, color, opacity) => {
     const statusText = stack.addText(text);
     statusText.font = Font.mediumSystemFont(font);
     statusText.textColor = color || _textColor;
     if (!opacity) statusText.textOpacity = 0.9;
   };
-  
+
   // 小号组件
   const smallWidget = async () => {
     const { padding, textSize, barSize, gap } = getLayout();
     const statuColor = status === 'A' ? Color.green() : Color.orange();
     const pointColor = cumulativePoint >= 9 ? Color.red() : cumulativePoint >= 6 ? Color.orange() : cumulativePoint >= 3 ? Color.blue() : Color.green();
-    
+
     const widget = new ListWidget();
     widget.setPadding(padding, padding, padding, padding);
     const mainStack = generateStack(widget);
     mainStack.setPadding(0, 0, 0, -2);
     mainStack.size = new Size(0, 40);
-    
+
     // 顶部分数区域
     const topStack = generateStack(mainStack);
     topStack.setPadding(-6.5, -2, 0, 0)
@@ -497,7 +513,7 @@ async function main(family) {
     pointStack.setPadding(20, 4, 0, 0)
     addHorizontalText(pointStack, '分', 14, pointColor);
     mainStack.addSpacer();
-      
+
     const iconStack = mainStack.addStack();
     iconStack.layoutVertically();
     const icons = nothing 
@@ -515,7 +531,7 @@ async function main(family) {
     icon.imageSize = new Size(25, 25)
     iconStack.addSpacer();
     widget.addSpacer();
-    
+
     // 准驾车型
     const allowDriveStack = generateStack(widget);
     createBarStack(allowDriveStack, 8, 8, '#8C7CFF', gap);
@@ -523,7 +539,7 @@ async function main(family) {
     allowDriveStack.addSpacer();  
     addHorizontalText(allowDriveStack, allowToDrive, textSize);
     widget.addSpacer(3);
-    
+
     // 驾照状态
     const statusStack = generateStack(widget)
     createBarStack(statusStack, 8, 8, '#FF7800', gap);
@@ -537,12 +553,12 @@ async function main(family) {
     barStack.borderWidth = 2;
     addHorizontalText(barStack, isStatus, 11, statuColor, true);
     widget.addSpacer();
-    
+
     // 换证/年检日期
     const bottomBarStack = generateStack(widget);
     const barColor = getRandomItem(['#0088FF', '#14BAFF', '#8C7CFF']);
     createBarStack(bottomBarStack, 8, barSize, barColor, gap);
-    
+
     const vStack = bottomBarStack.addStack();
     vStack.layoutVertically();
     const bottomStack1 = generateStack(vStack);
@@ -554,7 +570,7 @@ async function main(family) {
     addHorizontalText(bottomStack2, '年检', textSize);
     bottomStack2.addSpacer();
     addHorizontalText(bottomStack2, validPeriodEnd, textSize);
-    
+
     if (setting.smallBg) {
       await setBackground(widget);
     } else {
@@ -563,11 +579,11 @@ async function main(family) {
     widget.url = statusUrl;
     return widget;
   };
-  
+
   // 渲染组件
   const runWidget = async () => {
-    const widget = await (family === 'medium' || family === 'large' ? createWidget() : smallWidget());
-    
+    const widget = await (family === 'medium' ? createWidget() : smallWidget());
+
     if (config.runsInApp) {
       await widget[`present${family.charAt(0).toUpperCase() + family.slice(1)}`]();
     } else {
@@ -578,4 +594,3 @@ async function main(family) {
   };
   await runWidget();
 }
-module.exports = { main }
