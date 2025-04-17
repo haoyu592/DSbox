@@ -267,7 +267,6 @@ async function main(family) {
       : new Color('#D30000');
 
   const textColor = Color.dynamic(new Color(setting.textLightColor), new Color(setting.textDarkColor));
-  const _textColor = Color.dynamic(new Color(setting.smallLightColor || '#000000'), new Color(setting.smallDarkColor || '#FFFFFF'));
 
   // 设置组件背景
   const setBackground = async (widget) => {
@@ -286,7 +285,7 @@ async function main(family) {
       const y = 0.5 + 0.5 * Math.sin(radianAngle);
       gradient.startPoint = new Point(1 - x, y);
       gradient.endPoint = new Point(x, 1 - y);
-      
+
       gradient.locations = [0, 1];
       gradient.colors = [
         new Color(randomColor, Number(setting.transparency)),
@@ -488,7 +487,8 @@ async function main(family) {
   const addHorizontalText = (stack, text, font, color, opacity) => {
     const statusText = stack.addText(text);
     statusText.font = Font.mediumSystemFont(font);
-    statusText.textColor = color || _textColor;
+    if (color) 
+    statusText.textColor = color;
     if (!opacity) statusText.textOpacity = 0.9;
   };
 
@@ -497,6 +497,7 @@ async function main(family) {
     const { padding, textSize, barSize, gap } = getLayout();
     const statuColor = status === 'A' ? Color.green() : Color.orange();
     const pointColor = cumulativePoint >= 9 ? Color.red() : cumulativePoint >= 6 ? Color.orange() : cumulativePoint >= 3 ? Color.blue() : Color.green();
+    const emoticon = getRandomItem(['🚕', '🚚', ' ']);
 
     const widget = new ListWidget();
     widget.setPadding(padding, padding, padding, padding);
@@ -534,15 +535,15 @@ async function main(family) {
 
     // 准驾车型
     const allowDriveStack = generateStack(widget);
-    createBarStack(allowDriveStack, 8, 8, '#8C7CFF', gap);
+    createBarStack(allowDriveStack, 8, 8, '#FF8500', gap);
     addHorizontalText(allowDriveStack, '准驾车型', textSize);
     allowDriveStack.addSpacer();  
-    addHorizontalText(allowDriveStack, allowToDrive, textSize);
+    addHorizontalText(allowDriveStack, `${emoticon} ${allowToDrive}`, textSize);
     widget.addSpacer(3);
 
     // 驾照状态
     const statusStack = generateStack(widget)
-    createBarStack(statusStack, 8, 8, '#FF7800', gap);
+    createBarStack(statusStack, 8, 8, '#8C7CFF', gap);
     addHorizontalText(statusStack, '驾照状态', textSize);
     statusStack.addSpacer();
     const barStack = statusStack.addStack();
