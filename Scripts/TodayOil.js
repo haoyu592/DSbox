@@ -2,7 +2,7 @@
 // These must be at the very top of the file. Do not edit.
 // icon-color: orange; icon-glyph: magic;
 // 名称: 油价查询小部件
-// 作者: DeepSeek-R1
+// 作者: haoyu592
 // 描述: 每4小时自动刷新油价数据，支持自定义城市配置，按颜色区分油价类型
 
 // 配置区域 (用户可修改)
@@ -50,7 +50,7 @@ async function main() {
   widget.backgroundColor = bgColor;
   widget.setPadding(12, 15, 10, 15);
   widget.spacing = 6;
-  widget.url = "https://youjia.bazhepu.com/";
+  widget.url = "scriptable:///";
   
   // 获取小部件尺寸
   const widgetFamily = config.runsInWidget ? args.widgetFamily : "small";
