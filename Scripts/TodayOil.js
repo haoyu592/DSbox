@@ -2,7 +2,7 @@
 // These must be at the very top of the file. Do not edit.
 // icon-color: orange; icon-glyph: magic;
 // 名称: 油价查询小部件
-// 作者: haoyu592
+// 作者: DeepSeek-R1
 // 描述: 每4小时自动刷新油价数据，支持自定义城市配置，按颜色区分油价类型
 
 // 配置区域 (用户可修改)
@@ -11,8 +11,8 @@ const CONFIG = {
   defaultCity: "上海", // 默认城市(汉字)
   textSize: 14, // 字体大小
   textSpacing: 2, // 文字间距
-  barHeight: 2, // 柱状体高度
-  barWidth: 24, // 柱状体宽度
+  barHeight: 16, // 柱状体高度
+  barWidth: 4, // 柱状体宽度
 };
 
 // 油价颜色配置
@@ -48,8 +48,8 @@ async function main() {
   const secondaryTextColor = Color.dynamic(new Color("#666666"), new Color("#AAAAAA"));
   
   widget.backgroundColor = bgColor;
-  widget.setPadding(10, 15, 10, 15);
-  widget.spacing = CONFIG.textSpacing;
+  widget.setPadding(12, 15, 10, 15);
+  widget.spacing = 6;
   widget.url = "https://youjia.bazhepu.com/";
   
   // 获取小部件尺寸
@@ -245,76 +245,59 @@ function createOilDisplay(widget, data, cityHanzi, widgetFamily, textColor, seco
   // 添加标题 - 使用汉字城市名
   const titleText = widgetFamily === "small" ? "油价" : `${cityHanzi}油价`;
   const title = widget.addText(titleText);
-  title.font = Font.boldSystemFont(widgetFamily === "small" ? 14 : 16);
+  title.font = Font.boldSystemFont(widgetFamily === "small" ? 15 : 16);
   title.textColor = textColor;
-  widget.addSpacer(6);
+  widget.addSpacer(8);
   
-  // 根据小部件尺寸调整布局
-  if (widgetFamily === "small") {
-    // 小部件布局 - 紧凑布局
-    const row = widget.addStack();
-    row.layoutHorizontally();
-    row.spacing = 10;
-    
-    addOilItem(row, "92#", data["92#"], COLOR_CONFIG["92#"], textColor, widgetFamily);
-    addOilItem(row, "95#", data["95#"], COLOR_CONFIG["95#"], textColor, widgetFamily);
-    
-    widget.addSpacer(5);
-    
-    const row2 = widget.addStack();
-    row2.layoutHorizontally();
-    row2.spacing = 10;
-    
-    addOilItem(row2, "98#", data["98#"], COLOR_CONFIG["98#"], textColor, widgetFamily);
-    addOilItem(row2, "0#", data["0#"], COLOR_CONFIG["0#"], textColor, widgetFamily);
-    
-  } else {
-    // 中/大部件布局 - 完整布局
-    const row1 = widget.addStack();
-    row1.layoutHorizontally();
-    row1.spacing = 15;
-    
-    addOilItem(row1, "92#", data["92#"], COLOR_CONFIG["92#"], textColor, widgetFamily);
-    addOilItem(row1, "95#", data["95#"], COLOR_CONFIG["95#"], textColor, widgetFamily);
-    
-    widget.addSpacer(10);
-    
-    const row2 = widget.addStack();
-    row2.layoutHorizontally();
-    row2.spacing = 15;
-    
-    addOilItem(row2, "98#", data["98#"], COLOR_CONFIG["98#"], textColor, widgetFamily);
-    addOilItem(row2, "0#柴油", data["0#"], COLOR_CONFIG["0#"], textColor, widgetFamily);
-    
-    widget.addSpacer(12);
-    
-    // 添加更多信息（仅在中/大部件中显示）
-    //const infoText = widget.addText("数据来源: 车主指南 | 每4小时更新");
-    //infoText.font = Font.regularSystemFont(10);
-    //infoText.textColor = secondaryTextColor;
-    //infoText.centerAlignText();
+  // 创建主网格容器
+  const gridStack = widget.addStack();
+  gridStack.layoutVertically();
+  gridStack.spacing = 8;
+  
+  // 第一行：92# 和 98#
+  const row1 = gridStack.addStack();
+  row1.layoutHorizontally();
+  row1.spacing = 20;
+  
+  addOilItem(row1, "92#", data["92#"], COLOR_CONFIG["92#"], textColor, widgetFamily);
+  addOilItem(row1, "98#", data["98#"], COLOR_CONFIG["98#"], textColor, widgetFamily);
+  
+  // 第二行：95# 和 0#柴油
+  const row2 = gridStack.addStack();
+  row2.layoutHorizontally();
+  row2.spacing = 20;
+  
+  addOilItem(row2, "95#", data["95#"], COLOR_CONFIG["95#"], textColor, widgetFamily);
+  addOilItem(row2, "0#柴油", data["0#"], COLOR_CONFIG["0#"], textColor, widgetFamily);
+  
+  // 仅在中尺寸显示额外信息
+  if (widgetFamily !== "small") {
+	
   }
 }
 
 // 添加油价项目（带柱状体）
 function addOilItem(container, label, price, color, textColor, widgetFamily) {
+  // 主容器
   const itemStack = container.addStack();
   itemStack.layoutVertically();
   itemStack.spacing = 1;
   
-  // 添加颜色柱状体
-  const barStack = itemStack.addStack();
-  barStack.size = new Size(CONFIG.barWidth, CONFIG.barHeight);
-  barStack.backgroundColor = new Color(color);
-  barStack.cornerRadius = 1;
+  // 标签行（柱状体 + 油号）
+  const labelRow = itemStack.addStack();
+  labelRow.layoutHorizontally();
+  labelRow.spacing = 4;
+  labelRow.centerAlignContent();
   
-  // 调整小部件尺寸的字体大小
-  const labelFontSize = widgetFamily === "small" ? CONFIG.textSize - 2 : CONFIG.textSize;
-  const priceFontSize = widgetFamily === "small" ? CONFIG.textSize : CONFIG.textSize + 2;
+  // 添加颜色柱状体
+  const bar = labelRow.addStack();
+  bar.size = new Size(CONFIG.barWidth, CONFIG.barHeight);
+  bar.backgroundColor = new Color(color);
+  bar.cornerRadius = 2;
   
   // 油价标签
-  const labelText = itemStack.addText(label);
-  labelText.font = Font.mediumSystemFont(labelFontSize);
+  const labelText = labelRow.addText(label);
+  labelText.font = Font.mediumSystemFont(CONFIG.textSize);
   labelText.textColor = new Color(color);
   
   // 油价数值
@@ -328,8 +311,9 @@ function addOilItem(container, label, price, color, textColor, widgetFamily) {
   }
   
   const priceText = itemStack.addText(priceValue);
-  priceText.font = Font.boldSystemFont(priceFontSize);
+  priceText.font = Font.boldSystemFont(CONFIG.textSize);
   priceText.textColor = textColor;
+  priceText.leftAlignText();
 }
 
 // 执行主函数
