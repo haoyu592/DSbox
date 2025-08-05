@@ -11,7 +11,7 @@ const CONFIG = {
   defaultCity: "上海", // 默认城市(汉字)
   textSize: 14, // 字体大小
   textSpacing: 2, // 文字间距
-  sinopecLogoUrl: "https://www.sinopec.com/images/logo.png" // 可自定义的中石化LOGO URL
+  sinopecLogoUrl: "https://raw.githubusercontent.com/haoyu592/DSbox/main/Old/Sinopec1.png" // 可自定义的中石化LOGO URL
 };
 
 // 油价颜色配置
@@ -67,6 +67,7 @@ async function main() {
     // 添加底部更新时间
     const footer = widget.addStack();
     footer.layoutHorizontally();
+    footer.topAlignContent();
     
     const updateText = footer.addText(`更新: ${formatTime(new Date())}`);
     updateText.font = Font.regularSystemFont(10);
@@ -242,52 +243,27 @@ async function createOilDisplay(widget, data, cityHanzi, textColor, secondaryTex
   // 创建顶部标题栏
   const headerStack = widget.addStack();
   headerStack.layoutHorizontally();
-  headerStack.spacing = 8;
   
-  // 左侧标题 - 整合城市名称
-  const titleStack = headerStack.addStack();
-  titleStack.layoutVertically();
-  
-  const title = titleStack.addText(`今日油价 · ${cityHanzi}`);
+  const title = headerStack.addText(`今日油价 · ${cityHanzi}`);
   title.font = Font.boldSystemFont(18);
-  title.textColor = textColor; // 使用动态文字颜色
+  title.textColor = textColor;
   
   headerStack.addSpacer();
   
-  // 右侧添加中石化图标和更新时间
-  const rightStack = headerStack.addStack();
-  rightStack.layoutVertically();
-  rightStack.centerAlignContent();
+  // 主容器：油价网格 + 图标
+  const mainContainer = widget.addStack();
+  mainContainer.layoutHorizontally();
+  mainContainer.spacing = 5; // 缩小网格和图标之间的间距
   
-  // 创建中石化图标 (使用可配置的图片URL)
-  try {
-    const request = new Request(CONFIG.sinopecLogoUrl);
-    const logo = await request.loadImage();
-    const logoImage = rightStack.addImage(logo);
-    logoImage.imageSize = new Size(32, 32);
-  } catch (e) {
-    // 如果图片加载失败，使用文字替代
-    const sinopecText = rightStack.addText("中石化");
-    sinopecText.font = Font.mediumSystemFont(12);
-    sinopecText.textColor = Color.red();
-  }
-  
-  // 添加更新时间到图标下方
-  const updateText = rightStack.addText(formatTime(new Date()));
-  updateText.font = Font.regularSystemFont(10);
-  updateText.textColor = secondaryTextColor; // 使用次要文字颜色
-  
-  widget.addSpacer(12);
-  
-  // 创建价格网格
-  const grid = widget.addStack();
+  // 创建油价网格（两列）
+  const grid = mainContainer.addStack();
   grid.layoutHorizontally();
-  grid.spacing = 15;
+  grid.spacing = 15; // 列间距也适当缩小
   
   // 左侧价格列
   const leftCol = grid.addStack();
   leftCol.layoutVertically();
-  leftCol.spacing = 12;
+  leftCol.spacing = 10; // 行间距缩小
   
   addOilItem(leftCol, "92#", data["92#"], COLOR_CONFIG["92#"], textColor);
   addOilItem(leftCol, "95#", data["95#"], COLOR_CONFIG["95#"], textColor);
@@ -295,21 +271,51 @@ async function createOilDisplay(widget, data, cityHanzi, textColor, secondaryTex
   // 右侧价格列
   const rightCol = grid.addStack();
   rightCol.layoutVertically();
-  rightCol.spacing = 12;
+  rightCol.spacing = 10; // 行间距缩小
   
   addOilItem(rightCol, "98#", data["98#"], COLOR_CONFIG["98#"], textColor);
   addOilItem(rightCol, "0#柴油", data["0#"], COLOR_CONFIG["0#"], textColor);
+  
+  // 添加弹性空间使图标靠右
+  mainContainer.addSpacer();
+  
+  // 右侧图标容器（垂直居中显示）
+  const iconContainer = mainContainer.addStack();
+  iconContainer.layoutVertically();
+  iconContainer.centerAlignContent();
+  iconContainer.size = new Size(90, 0); // 宽度更紧凑
+  
+  // 添加弹性空间使图标垂直居中
+  iconContainer.addSpacer();
+  
+  // 添加中石化图标（大小调整为32x32）
+  try {
+    const request = new Request(CONFIG.sinopecLogoUrl);
+    const logo = await request.loadImage();
+    const logoImage = iconContainer.addImage(logo);
+    logoImage.imageSize = new Size(90, 90); // 更紧凑的图标尺寸
+  } catch (e) {
+    const sinopecText = iconContainer.addText("中石化");
+    sinopecText.font = Font.mediumSystemFont(14);
+    sinopecText.textColor = Color.red();
+  }
+  
+  // 底部弹性空间平衡
+  iconContainer.addSpacer();
+  
+  // 添加弹性空间确保更新时间靠近油价网格
+  widget.addSpacer(3); // 进一步缩小更新时间与油价网格的距离
 }
 
 // 添加油价项目
 function addOilItem(container, label, price, color, textColor) {
   const itemStack = container.addStack();
   itemStack.layoutHorizontally();
-  itemStack.spacing = 8;
+  itemStack.spacing = 8; // 项目内部间距缩小
   
   // 油价类型标识
   const typeIndicator = itemStack.addStack();
-  typeIndicator.size = new Size(6, 30);
+  typeIndicator.size = new Size(6, 28); // 更细的指示条
   typeIndicator.backgroundColor = new Color(color);
   
   // 油价信息
@@ -318,7 +324,7 @@ function addOilItem(container, label, price, color, textColor) {
   
   const labelText = infoStack.addText(label);
   labelText.font = Font.mediumSystemFont(CONFIG.textSize);
-  labelText.textColor = new Color(color); // 油价类型保持彩色
+  labelText.textColor = new Color(color);
   
   // 油价数值
   let priceValue;
@@ -331,8 +337,8 @@ function addOilItem(container, label, price, color, textColor) {
   }
   
   const priceText = infoStack.addText(priceValue);
-  priceText.font = Font.boldSystemFont(CONFIG.textSize + 4);
-  priceText.textColor = textColor; // 使用动态文字颜色
+  priceText.font = Font.boldSystemFont(CONFIG.textSize + 4); // 略微减小字体
+  priceText.textColor = textColor;
 }
 
 // 执行主函数
