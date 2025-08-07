@@ -1,6 +1,6 @@
 // 油价获取脚本 - 兼容Quantumult X
 const CITY = "上海"; // 默认城市
-const SAVE_PATH = "oilData.json"; // 数据保存路径
+const DATA_KEY = "oilData"; // 数据存储键名
 
 // 主函数
 async function main() {
@@ -20,25 +20,17 @@ async function main() {
     // 错误通知
     $notify("油价获取失败", err.message || err);
     console.log(`油价获取失败: ${err}`);
+  } finally {
+    $done();
   }
 }
 
 // 获取配置的城市
 function getConfiguredCity() {
   return new Promise((resolve) => {
-    // 尝试从Quantumult X配置读取
+    // 从Quantumult X配置读取
     const qxCity = $prefs.valueForKey("oilCity");
-    if (qxCity) return resolve(qxCity);
-    
-    // 尝试从本地文件读取
-    const fm = FileManager.local();
-    const path = fm.joinPath(fm.documentsDirectory(), "oilCity.txt");
-    if (fm.fileExists(path)) {
-      return resolve(fm.readString(path));
-    }
-    
-    // 使用默认城市
-    resolve(CITY);
+    resolve(qxCity || CITY);
   });
 }
 
@@ -94,11 +86,9 @@ async function fetchOilData(city) {
   });
 }
 
-// 保存数据到本地
+// 保存数据到Quantumult X的持久化存储
 function saveData(data) {
-  const fm = FileManager.local();
-  const path = fm.joinPath(fm.documentsDirectory(), SAVE_PATH);
-  fm.writeString(path, JSON.stringify(data));
+  $prefs.setValueForKey(JSON.stringify(data), DATA_KEY);
 }
 
 // 创建通知内容
@@ -107,4 +97,4 @@ function createNotificationBody(data) {
 }
 
 // 执行主函数
-main().finally(() => $done());
+main();
