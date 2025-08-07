@@ -1,0 +1,80 @@
+{
+  "name": "油价配置",
+  "description": "油价小组件本地化配置",
+  "author": "haoyu592",
+  "resource": "https://raw.githubusercontent.com/yourname/repo/oil_config.boxjs.json",
+  "data": [
+    {
+      "key": "oil_province",
+      "name": "省份",
+      "type": "select",
+      "options": [
+        {"label": "北京", "value": "beijing"},
+        {"label": "上海", "value": "shanghai"},
+        {"label": "天津", "value": "tianjin"},
+        {"label": "重庆", "value": "chongqing"},
+        {"label": "广东", "value": "guangdong"},
+        {"label": "江苏", "value": "jiangsu"},
+        {"label": "浙江", "value": "zhejiang"},
+        {"label": "山东", "value": "shandong"},
+        {"label": "四川", "value": "sichuan"},
+        {"label": "湖北", "value": "hubei"},
+        {"label": "湖南", "value": "hunan"},
+        {"label": "河北", "value": "hebei"},
+        {"label": "河南", "value": "henan"}
+      ],
+      "default": "shanghai",
+      "description": "选择您所在的省份"
+    },
+    {
+      "key": "oil_types",
+      "name": "显示油号",
+      "type": "multiselect",
+      "options": [
+        {"label": "92#汽油", "value": "92#"},
+        {"label": "95#汽油", "value": "95#"},
+        {"label": "98#汽油", "value": "98#"},
+        {"label": "0#柴油", "value": "0#"}
+      ],
+      "default": ["92#", "95#"],
+      "description": "选择要显示的油号类型"
+    },
+    {
+      "key": "refresh_interval",
+      "name": "刷新频率",
+      "type": "select",
+      "options": [
+        {"label": "每2小时", "value": 2},
+        {"label": "每4小时", "value": 4},
+        {"label": "每6小时", "value": 6},
+        {"label": "每天", "value": 24}
+      ],
+      "default": 4,
+      "description": "油价数据刷新频率"
+    },
+    {
+      "key": "text_size",
+      "name": "字体大小",
+      "type": "number",
+      "default": 16,
+      "description": "小组件文字大小(12-20)"
+    }
+  ],
+  "scripts": {
+    "oil_price_task": {
+      "name": "油价获取任务",
+      "url": "https://raw.githubusercontent.com/yourname/repo/oil_task.js",
+      "description": "获取最新油价数据"
+    }
+  },
+  "storage": {
+    "oil_data": {
+      "name": "油价数据",
+      "description": "存储最新油价信息"
+    },
+    "oil_config": {
+      "name": "配置缓存",
+      "description": "存储用户配置"
+    }
+  }
+}
