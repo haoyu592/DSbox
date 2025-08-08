@@ -1,14 +1,4 @@
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: light-gray; icon-glyph: magic;
-//
-//  oil_widget.js
-//  
-//
-//  Created by KW on 2025/8/8.
-//
 // 配置参数
-const REFRESH_INTERVAL = 4 * 60 * 60 * 1000 // 4小时
 const ICON_URL = "https://raw.githubusercontent.com/haoyu592/DSbox/main/Old/Sinopec1.png"
 
 // 油品颜色配置
@@ -21,8 +11,18 @@ const OIL_COLORS = {
 
 // 从BoxJS获取数据
 function getOilData() {
-  const rawData = Keychain.get("oil_price_data")
+  const rawData = $prefs.valueForKey("oil_price_data")
   return rawData ? JSON.parse(rawData) : null
+}
+
+function getProvince() {
+  return $prefs.valueForKey("oil_province") || "上海"
+}
+
+// 获取刷新频率
+function getRefreshInterval() {
+  const hours = $prefs.valueForKey("refresh_interval") || 4
+  return hours * 60 * 60 * 1000
 }
 
 // 创建小组件
@@ -39,43 +39,48 @@ async function createWidget() {
   const mainStack = widget.addStack()
   mainStack.layoutHorizontally()
   mainStack.spacing = 8
+  mainStack.size = new Size(0, 0)
   
-  // 左侧油价网格
-  const gridStack = mainStack.addStack()
-  gridStack.layoutVertically()
-  gridStack.spacing = 10
+  // 左侧油价网格 (占70%宽度)
+  const leftStack = mainStack.addStack()
+  leftStack.layoutVertically()
+  leftStack.size = new Size(0, 0)
+  leftStack.setPadding(5, 5, 5, 5)
   
   // 第一行：92# 和 95#
-  const row1 = gridStack.addStack()
+  const row1 = leftStack.addStack()
   row1.layoutHorizontally()
   row1.spacing = 10
   addOilItem(row1, "92#", data?.GAS_92 || "--", OIL_COLORS.GAS_92, textColor)
   addOilItem(row1, "95#", data?.GAS_95 || "--", OIL_COLORS.GAS_95, textColor)
   
   // 第二行：98# 和 0#
-  const row2 = gridStack.addStack()
+  const row2 = leftStack.addStack()
   row2.layoutHorizontally()
   row2.spacing = 10
   addOilItem(row2, "98#", data?.AIPAO_GAS_98 || "--", OIL_COLORS.AIPAO_GAS_98, textColor)
   addOilItem(row2, "0#", data?.CHECHAI_0 || "--", OIL_COLORS.CHECHAI_0, textColor)
   
-  // 右侧图标
-  const iconStack = mainStack.addStack()
-  iconStack.size = new Size(100, 100)
+  // 右侧图标 (占30%宽度)
+  const rightStack = mainStack.addStack()
+  rightStack.layoutVertically()
+  rightStack.addSpacer()
+  
   const image = await loadImage(ICON_URL)
-  const imgElement = iconStack.addImage(image)
+  const imgElement = rightStack.addImage(image)
+  imgElement.imageSize = new Size(70, 70)
   imgElement.centerAlignImage()
   
+  rightStack.addSpacer()
+  
   // 省份信息
-  if (data?.province) {
-    const footer = widget.addText(`${data.province}油价`)
-    footer.font = Font.systemFont(12)
-    footer.textColor = textColor
-    footer.centerAlignText()
-  }
+  const footer = widget.addText(`${getProvince()}油价`)
+  footer.font = Font.systemFont(12)
+  footer.textColor = textColor
+  footer.centerAlignText()
   
   // 设置刷新
-  widget.refreshAfterDate = new Date(Date.now() + REFRESH_INTERVAL)
+  widget.refreshAfterDate = new Date(Date.now() + getRefreshInterval())
   
   return widget
 }
@@ -84,23 +89,31 @@ async function createWidget() {
 function addOilItem(stack, name, price, color, textColor) {
   const item = stack.addStack()
   item.layoutVertically()
-  item.setPadding(8, 8, 8, 8)
-  item.cornerRadius = 8
+  item.size = new Size(70, 70)
+  item.setPadding(5, 5, 5, 5)
+  item.cornerRadius = 10
   item.backgroundColor = new Color(color)
   
   const nameText = item.addText(name)
   nameText.font = Font.boldSystemFont(14)
   nameText.textColor = textColor
+  nameText.centerAlignText()
   
   const priceText = item.addText(price)
   priceText.font = Font.boldSystemFont(18)
   priceText.textColor = textColor
+  priceText.centerAlignText()
 }
 
 // 加载远程图片
 async function loadImage(url) {
-  const req = new Request(url)
-  return await req.loadImage()
+  try {
+    const req = new Request(url)
+    return await req.loadImage()
+  } catch (e) {
+    // 返回空图像作为后备
+    return new Image()
+  }
 }
 
 // 主执行
