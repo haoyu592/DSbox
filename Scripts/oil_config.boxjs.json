@@ -1,8 +1,7 @@
 {
   "name": "油价配置",
   "description": "油价小组件本地化配置",
-
-  "resource": "https://raw.githubusercontent.com/yourname/repo/oil_config.boxjs.json",
+  "resource": "https://raw.githubusercontent.com/haoyu592/DSbox",
   "data": {
     "oil_province": {
       "title": "省份选择",
@@ -25,22 +24,30 @@
         "henan": "河南"
       }
     },
-
-
-    "oil_types": {
-      "title": "显示油号",
-      "description": "选择要显示的油号类型",
-      "type": "multiselect",
-      "default": ["92#", "95#"],
-      "options": {
-        "92#": "92#汽油",
-        "95#": "95#汽油",
-        "98#": "98#汽油",
-        "0#": "0#柴油"
-      }
+    "oil_92": {
+      "title": "显示92#汽油",
+      "description": "是否显示92#汽油价格",
+      "type": "switch",
+      "default": true
     },
-
-
+    "oil_95": {
+      "title": "显示95#汽油",
+      "description": "是否显示95#汽油价格",
+      "type": "switch",
+      "default": true
+    },
+    "oil_98": {
+      "title": "显示98#汽油",
+      "description": "是否显示98#汽油价格",
+      "type": "switch",
+      "default": false
+    },
+    "oil_0": {
+      "title": "显示0#柴油",
+      "description": "是否显示0#柴油价格",
+      "type": "switch",
+      "default": false
+    },
     "refresh_interval": {
       "title": "刷新频率",
       "description": "油价数据刷新频率",
@@ -53,8 +60,6 @@
         "24": "每天"
       }
     },
-
-
     "text_size": {
       "title": "字体大小",
       "description": "小组件文字大小(12-20)",
@@ -71,7 +76,6 @@
   "scripts": {
     "oil_price_task": {
       "title": "油价获取任务",
-
       "description": "获取最新油价数据",
       "url": "https://raw.githubusercontent.com/yourname/repo/oil_task.js"
     }
