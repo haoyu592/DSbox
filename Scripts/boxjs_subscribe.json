@@ -1,0 +1,14 @@
+{
+  "name": "油价数据",
+  "author": "haoyu592",
+  "subscriptions": [
+    {
+      "id": "oil_price",
+      "name": "油价数据存储",
+      "keys": [
+        {"key": "oil_province", "name": "省份", "type": "string", "default": "北京"},
+        {"key": "oil_price_data", "name": "油价数据", "type": "json"}
+      ]
+    }
+  ]
+}
