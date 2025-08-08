@@ -1,13 +1,14 @@
 {
   "name": "油价配置",
   "description": "油价小组件本地化配置",
-  "author": "haoyu592",
-  "resource": "https://raw.githubusercontent.com/haoyu592",
+
+  "resource": "https://raw.githubusercontent.com/yourname/repo/oil_config.boxjs.json",
   "data": {
     "oil_province": {
       "title": "省份选择",
       "description": "选择您所在的省份",
       "type": "select",
+      "default": "shanghai",
       "options": {
         "beijing": "北京",
         "shanghai": "上海",
@@ -22,33 +23,38 @@
         "hunan": "湖南",
         "hebei": "河北",
         "henan": "河南"
-      },
-      "default": "shanghai"
+      }
     },
+
+
     "oil_types": {
       "title": "显示油号",
       "description": "选择要显示的油号类型",
       "type": "multiselect",
+      "default": ["92#", "95#"],
       "options": {
         "92#": "92#汽油",
         "95#": "95#汽油",
         "98#": "98#汽油",
         "0#": "0#柴油"
-      },
-      "default": ["92#", "95#"]
+      }
     },
+
+
     "refresh_interval": {
       "title": "刷新频率",
       "description": "油价数据刷新频率",
       "type": "select",
+      "default": "4",
       "options": {
         "2": "每2小时",
         "4": "每4小时",
         "6": "每6小时",
         "24": "每天"
-      },
-      "default": "4"
+      }
     },
+
+
     "text_size": {
       "title": "字体大小",
       "description": "小组件文字大小(12-20)",
@@ -65,8 +71,9 @@
   "scripts": {
     "oil_price_task": {
       "title": "油价获取任务",
-      "url": "https://raw.githubusercontent.com/yourname/repo/oil_task.js",
-      "description": "获取最新油价数据"
+
+      "description": "获取最新油价数据",
+      "url": "https://raw.githubusercontent.com/yourname/repo/oil_task.js"
     }
   },
   "storage": {
