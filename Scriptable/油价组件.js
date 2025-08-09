@@ -185,7 +185,7 @@ function addOilGrid(parentStack, oilData) {
   };
   
   // 第一行（92# 和 95#）
-  const row1 = parentStack.addStack();
+  const row1 = parentStack.addStack(2);
   addOilItem(row1, "92#", findOilPrice(oilData, "92"), colors["92#"]);
   addOilItem(row1, "95#", findOilPrice(oilData, "95"), colors["95#"]);
   
