@@ -20,7 +20,7 @@ async function main() {
   
   try {
     // 获取配置
-    const config = await getConfig();/Users/kangw/Library/Mobile Documents/iCloud~dk~simonbs~Scriptable/Documents/油价组件.js
+    const config = await getConfig();
     if (!config || !config.province) {
       throw new Error("请先配置省份");
     }
