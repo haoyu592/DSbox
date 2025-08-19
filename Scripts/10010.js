@@ -1,60 +1,81 @@
-// 名称: 中国联通积分签到
-// 描述: 通过BoxJS配置Cookie，每日自动签到获取积分
+// 名称: 中国联通签到脚本
+// 描述: 每日自动执行中国联通积分签到
 // 作者: haoyu592
 // 日期: 2025-08-19
+// 支持: https://github.com/haoyu592/DSbox
+// 使用说明: 通过 BoxJS 填写 Cookie (key: 10010Cookie)
 // 使用BoxJS配置Cookie，重写链接：https://raw.githubusercontent.com/haoyu592/DSbox/main/Script/10010.js
 
-const cookieName = '中国联通积分签到';
-const cookieKey = 'sliverkiss_10010_cookie';
-const signurl = 'https://m.jf.10010.com/jf-external-application/uasptask/sign';
-const databody = JSON.stringify({ taskCode: "s746994535376642048" });
+const $ = new Env("中国联通签到");
+const COOKIE_KEY = "10010Cookie";
+const API_URL = "https://m.jf.10010.com/jf-external-application/uasptask/sign";
 
-let chavy = init();
-const cookieVal = chavy.getdata(cookieKey);
+// 从持久化存储获取 Cookie
+let cookie = $.getdata(COOKIE_KEY);
 
-if (cookieVal) {
-  sign();
-} else {
-  chavy.msg(cookieName, '⚠️ 请先配置Cookie', '');
-  chavy.done();
-}
+// 主函数
+(async () => {
+  if (!cookie) {
+    $.notify("❌ 中国联通签到失败", "请先填写 Cookie", "");
+    $.done();
+    return;
+  }
 
-function sign() {
-  const url = { url: signurl, headers: { Cookie: cookieVal, 'Content-Type': 'application/json;charset=UTF-8' }, body: databody };
-  chavy.post(url, (error, response, data) => {
-    try {
-      const result = JSON.parse(data);
-      if (result.code === '0') {
-        chavy.msg(cookieName, '✅ 签到成功', '');
-      } else if (result.code === '2') {
-        chavy.msg(cookieName, '⏰ 今日已签到', '');
-      } else {
-        chavy.msg(cookieName, '❌ 签到失败', `原因: ${result.message || '未知错误'}`);
-      }
-    } catch (e) {
-      chavy.msg(cookieName, '❌ 解析响应失败', `错误: ${e}`);
-    } finally {
-      chavy.done();
-    }
+  try {
+    const response = await signTask();
+    handleResponse(response);
+  } catch (error) {
+    $.notify("❌ 中国联通请求异常", error.message || error, "");
+  } finally {
+    $.done();
+  }
+})();
+
+// 执行签到请求
+function signTask() {
+  const headers = {
+    "Content-Type": "application/json;charset=UTF-8",
+    "Cookie": cookie,
+    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+  };
+
+  const body = JSON.stringify({
+    taskCode: "s746994535376642048"
+  });
+
+  return $.fetch({
+    url: API_URL,
+    method: "POST",
+    headers: headers,
+    body: body
   });
 }
 
-function init() {
-  isSurge = () => typeof $httpClient != "undefined";
-  isQuanX = () => typeof $task != "undefined";
-  getdata = (key) => $prefs.valueForKey(key);
-  setdata = (key, val) => $prefs.setValueForKey(val, key);
-  msg = (title, subtitle, body) => {
-    if (isQuanX()) $notify(title, subtitle, body);
-    if (isSurge()) $notification.post(title, subtitle, body);
-  };
-  log = (message) => console.log(message);
-  post = (options, callback) => {
-    if (isQuanX()) {
-      $task.fetch(options).then(response => callback(null, response, response.body), reason => callback(reason.error, null, null));
+// 处理响应结果
+function handleResponse(response) {
+  try {
+    const result = JSON.parse(response.body);
+    
+    if (result.code === "0000") {
+      $.notify("✅ 中国联通签到成功", result.msg || "积分已到账", "");
+      $.log("签到成功: " + JSON.stringify(result));
+    } else {
+      $.notify("❌ 中国联通签到失败", result.msg || "未知错误", "");
+      $.log("签到失败: " + response.body);
     }
-    if (isSurge()) $httpClient.post(options, callback);
-  };
-  done = (value = {}) => $done(value);
-  return { getdata, setdata, msg, log, post, done };
+  } catch (e) {
+    $.notify("❌ 中国联通响应解析失败", "请检查接口返回", "");
+    $.log("响应解析失败: " + response.body);
+  }
+}
+
+// 工具函数
+function Env(name) {
+  this.name = name;
+  this.getdata = (key) => $persistentStore.read(key);
+  this.setdata = (val, key) => $persistentStore.write(val, key);
+  this.fetch = (options) => $task.fetch(options);
+  this.notify = (title, subtitle, message) => $notify(title, subtitle, message);
+  this.log = (message) => console.log(`${this.name}: ${message}`);
+  this.done = () => $done();
 }
