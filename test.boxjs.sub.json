@@ -36,6 +36,24 @@
                 "https://raw.githubusercontent.com/haoyu592/DSbox/main/Old/Sinopec1.png"
             ],
             "script": "https://raw.githubusercontent.com/haoyu592/DSbox/main/oil_script.js"
+        },{
+            "author": "@haoyu592",
+            "keys": ["10010Cookie"],
+            "repo": "",
+            "id": "Cookie",
+            "settings": [{
+                    "id": "10010Cookie",
+                    "val": "",
+                    "name": "Cookie",
+                    "type": "json",
+                    "desc": ""
+                }
+            ],
+            "name": "联通Cookie",
+            "icons": [
+                "https://raw.githubusercontent.com/Orz-3/mini/master/Color/10010.png",
+                "https://raw.githubusercontent.com/Orz-3/mini/master/Color/10010.png"
+            ],
+            "script": "https://raw.githubusercontent.com/haoyu592/DSbox/main/oil_script.js"
         }
-    ]
 }
