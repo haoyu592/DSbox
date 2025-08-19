@@ -1,0 +1,41 @@
+{
+    "id": "haoyu592.test.sub",
+    "name": "Levi油价数据配置",
+    "author": "@haoyu592",
+    "icon": "https://raw.githubusercontent.com/haoyu592/DSbox/main/Old/test.png",
+    "repo": "https://github.com/haoyu592",
+    "apps": [{
+            "author": "@haoyu592",
+            "keys": ["oil_province", "oil_price_data", "refresh_interval"],
+            "repo": "",
+            "id": "oil_config",
+            "settings": [{
+                    "id": "oil_province",
+                    "val": "北京",
+                    "name": "选择省份",
+                    "type": "select",
+                    "options": "北京,天津,河北,山西,内蒙古,辽宁,吉林,黑龙江,上海,江苏,浙江,安徽,福建,江西,山东,河南,湖北,湖南,广东,广西,海南,重庆,四川,贵州,云南,西藏,陕西,甘肃,青海,宁夏,新疆",
+                    "desc": "选择您所在的省份获取当地油价"
+                }, {
+                    "id": "oil_price_data",
+                    "val": "",
+                    "name": "油价数据存储",
+                    "type": "json",
+                    "desc": "自动存储的最新油价数据（只读）"
+                }, {
+                    "id": "refresh_interval",
+                    "val": "4",
+                    "name": "刷新频率(小时)",
+                    "type": "number",
+                    "desc": "油价数据刷新间隔，范围1-24小时"
+                }
+            ],
+            "name": "油价数据配置",
+            "icons": [
+                "https://raw.githubusercontent.com/haoyu592/DSbox/main/Old/Sinopec1.png",
+                "https://raw.githubusercontent.com/haoyu592/DSbox/main/Old/Sinopec1.png"
+            ],
+            "script": "https://raw.githubusercontent.com/haoyu592/DSbox/main/oil_script.js"
+        }
+    ]
+}
