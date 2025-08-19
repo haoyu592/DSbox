@@ -4,7 +4,6 @@
 // 日期: 2025-08-19
 // 支持: https://github.com/haoyu592/DSbox
 // 使用说明: 通过 BoxJS 填写 Cookie (key: 10010Cookie)
-// 使用BoxJS配置Cookie，重写链接：https://raw.githubusercontent.com/haoyu592/DSbox/main/Script/10010.js
 
 const $ = new Env("中国联通签到");
 const COOKIE_KEY = "10010Cookie";
@@ -69,11 +68,10 @@ function handleResponse(response) {
   }
 }
 
-// 工具函数
 function Env(name) {
   this.name = name;
-  this.getdata = (key) => $persistentStore.read(key);
-  this.setdata = (val, key) => $persistentStore.write(val, key);
+  this.getdata = (key) => $prefs.valueForKey(key);
+  this.setdata = (val, key) => $prefs.setValueForKey(val, key);
   this.fetch = (options) => $task.fetch(options);
   this.notify = (title, subtitle, message) => $notify(title, subtitle, message);
   this.log = (message) => console.log(`${this.name}: ${message}`);
