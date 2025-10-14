@@ -1,9 +1,9 @@
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
 // icon-color: blue; icon-glyph: magic;
-// 名称：油价小组件（优化版）
+// 名称：油价
 // 作者：haoyu592
-// 更新时间：2025-08-09
+// 更新时间：2025-07-09
 // 描述：显示当地92#/95#/98#/0#柴油实时油价，必须配置省份
 
 // 配置说明：首次使用必须在Scriptable App内运行并配置省份
