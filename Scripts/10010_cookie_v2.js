@@ -23,7 +23,8 @@ https:\\/\\/m(?:xx)?\\.client\\.10010\\.com\\/(?:.*\\/)?smartwisdomCommon(?:New)
    mxx.client.10010.com —— [MITM] hostname 必须同时包含 m 和 mxx 两个域名，否则脚本不会触发。
 2. 新版登录态不再只依赖 JSESSIONID（服务端每次响应都会轮换它），改为同时识别
    JSESSIONID / ecs_token / c_mobile / u_account，命中任一即写入整串 Cookie。
-3. 移除 $.log($request.headers)（会把整串 Cookie 明文打进日志）。
+3. 日志会输出命中字段、长度以及整串 Cookie 明文（$ = new API(APIKey, true) 的 debug 开关控制），
+   便于核对抓到的字段是否完整；排查完可把 debug 改为 false 关闭。
  */
 const APIKey = 'YaYa_10010';
 $ = new API(APIKey, true);
@@ -36,8 +37,8 @@ function GetCookie() {
   const validKeys = ['JSESSIONID', 'ecs_token', 'c_mobile', 'u_account'];
   const hitKey = validKeys.find((k) => cookie.indexOf(k) > -1);
   if (cookie && hitKey) {
-    // 只记录命中字段与长度，不落 Cookie 明文
-    $.log(`捕获 Cookie，命中字段: ${hitKey}, 长度: ${cookie.length}`);
+    // 输出命中字段、长度与整串 Cookie 明文，方便核对抓到的字段是否完整
+    $.log(`捕获 Cookie，命中字段: ${hitKey}, 长度: ${cookie.length}\nCookie: ${cookie}`);
     $.write(cookie, 'cookie');
     const account = (cookie.match(/(?:c_mobile|u_account)=(\d{11})/) || [])[1] || '';
     const accText = account ? `${account.slice(0, 3)}****${account.slice(-4)}` : '当前账号';
