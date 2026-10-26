@@ -1,0 +1,13 @@
+# 联通获取Cookie（Quantumult X 重写片段，格式同 Scripts/Rewrite.conf）
+# 2026-10 新版联通 App：接口走 mxx.client.10010.com，需同时代理 m 与 mxx 两个域名，缺一个脚本不会触发
+# 脚本：10010_cookie_v2.js，只读请求头；Cookie 命中 JSESSIONID / ecs_token / c_mobile / u_account 任一即整串写入存储键 cookie
+
+hostname = m.client.10010.com, mxx.client.10010.com
+
+# 联通获取Cookie
+^https:\/\/m(?:xx)?\.client\.10010\.com\/(?:.*\/)?smartwisdomCommon(?:New)?(?:\?.*)?$ url script-request-header https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/10010_cookie_v2.js
+
+# 说明：本文件已按 QX 重写片段格式书写，Surge 的 #!name / [Script] 语法与之不同，二者不可混用。
+# Surge 等价写法（需要时另存为 .sgmodule）：
+# [Script]
+# 联通 Cookie 捕获 = type=http-request,pattern=^https:\/\/m(?:xx)?\.client\.10010\.com\/(?:.*\/)?smartwisdomCommon(?:New)?(?:\?.*)?$,script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/10010_cookie_v2.js,script-update-interval=0
