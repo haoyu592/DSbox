@@ -16,6 +16,7 @@
 	5. cookie 有效性判定由 bili_jct 改为 SESSDATA, 续期可正确落盘
 	6. me() 区分错误码, 仅 -101/-111 清库, 风控与网络异常保留 cookie
 	7. 修复 string2object 对含 "=" 的 cookie 值截断问题
+	8. 未携带 cookie / 缺少登录字段的请求改为静默跳过, 不再推送通知
 注意事项:
 	抓取cookie时注意保证账号登录状态;
 	账号内须有一定数量的关注数，否则无法完成投币;
@@ -202,11 +203,13 @@ const syncCookieHeader = () => {
 					? $.log("- access_key 已就绪")
 					: $.log("- ⚠️ 未取到 access_key, 分享/投币将回落 web 接口")
 			} else {
-				return $.msg($.name, "- 获取cookie信息异常")
+				// 未登录/浏览态下请求也可能带 cookie 但不含登录字段, 属正常现象, 只记日志不推通知
+				return $.log("- 获取cookie信息异常(缺少 DedeUserID 或 SESSDATA), 跳过")
 			}
 			persistentStore(config)
 		} else {
-			$.msg($.name, "- 未发现有效cookie信息")
+			// 未携带 cookie 的请求很常见, 静默跳过, 避免每次打开 App 都弹通知
+			$.log("- 未发现有效cookie信息, 跳过")
 		}
 	} else {
 		await signBiliBili()
