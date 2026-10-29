@@ -7,19 +7,18 @@
  * 鉴权模型（2026-10-29 实测）：
  *   身份 = Cookie 的 sessionId（= JSESSIONID）
  *   signature = MD5("token=wwesldfs29aniversaryvdld29&timestamp=<13位ms>&sysCode=MCS-MIMP-CORE")
- *   token 是客户端固定盐，与账号无关
+ *   部分接口另需 token：userInfoService 要 body.token，coupon 走 token 请求头
+ *   所以脚本对这两步内置「变体重试」：主方案失败且报错含 token/权限验证 时自动换下一种，
+ *   成功的方案会标注在结果里，便于确认到底哪种对。
  *
- * 任务流水线（对齐 sfsy.js 的 i() 主流程）：
- *   1. 积分(前)   ~memberIntegral~userInfoService~queryUserInfo
- *   2. 签到       ~memberNonactivity~integralTaskSignPlusService~automaticSignFetchPackage   ✅ 已实测
- *   3. 积分任务   ~memberNonactivity~integralTaskStrategyService~queryPointTaskAndSignFromES
- *   4. 超值福利   ~memberActLengthy~redPacketActivityService~superWelfare~receiveRedPacket
- *   5. 会员日     ~memberNonactivity~memberDayIndexService~index（仅 26-28 号执行）
- *   6. 优惠券     /mcs-mimp/coupon/available/list
- *   7. 积分(后)   同 1，用于算增量
- *
- * 说明：只有「签到」是端到端实测通过的；2/3/4/5/6 的 URL 与 body 按 sfsy.js 解混淆复原，
- *       body 未逐一验证。脚本对每步独立容错，失败只记录 errorMessage，不影响后续步骤。
+ * 任务流水线（对齐 sfsy.js 主流程）：
+ *   1 积分(前) ~memberIntegral~userInfoService~queryUserInfo
+ *   2 签到     ~integralTaskSignPlusService~automaticSignFetchPackage   ✅ 端到端实测
+ *   3 积分任务 ~integralTaskStrategyService~queryPointTaskAndSignFromES
+ *   4 超值福利 ~memberActLengthy~redPacketActivityService~superWelfare~receiveRedPacket
+ *   5 会员日   ~memberDayIndexService~index（仅 26-28 号）
+ *   6 优惠券   /mcs-mimp/coupon/available/list
+ *   7 积分(后) 同 1
  */
 
 (function () {
@@ -27,6 +26,7 @@
 
 const SESSION_KEY = 'sfsy_session';
 const SALT = 'wwesldfs29aniversaryvdld29';
+const APP_TOKEN = 'zeTLTYeG0bLetfRk';   // 小程序 queryUserInfo 请求体里的固定 token
 const SYS_CODE = 'MCS-MIMP-CORE';
 const CHANNEL = 'mypoint';
 const PLATFORM = 'MINI_PROGRAM';
@@ -42,7 +42,7 @@ const EP = {
   coupon: BASE + '/mcs-mimp/coupon/available/list'
 };
 
-/* ---------------- MD5（签名串为纯 ASCII） ---------------- */
+/* ---------------- MD5 ---------------- */
 function md5(s) {
   function rotl(x, n) { return (x << n) | (x >>> (32 - n)); }
   function add(a, b) { return (a + b) & 0xFFFFFFFF; }
@@ -130,7 +130,18 @@ function done(payload) {
   try { $done(payload || {}); } catch (e) { }
 }
 
-// 形如 xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx 的设备号，与原脚本同构
+// 递归替换 __SID__ 占位符
+function subst(v, sid) {
+  if (typeof v === 'string') return v === '__SID__' ? sid : v;
+  if (Array.isArray(v)) return v.map(function (x) { return subst(x, sid); });
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k in v) o[k] = subst(v[k], sid);
+    return o;
+  }
+  return v;
+}
+
 function deviceId() {
   const hex = '0123456789abcdef';
   let out = '';
@@ -163,30 +174,31 @@ function capture() {
   return done({});
 }
 
-/* ---------------- 请求封装 ---------------- */
-function api(sess, url, bodyObj) {
+/* ---------------- 请求 ---------------- */
+function api(sess, url, bodyObj, extraHeaders) {
   const ts = String(Date.now());
   const sign = md5('token=' + SALT + '&timestamp=' + ts + '&sysCode=' + SYS_CODE);
   const cookie = 'sessionId=' + sess.sessionId + '; JSESSIONID=' + sess.sessionId +
     (sess.userId ? '; _login_user_id_=' + sess.userId : '') +
     (sess.mobile ? '; _login_mobile_=' + sess.mobile : '') + '; mimp_g_env=5.0';
 
+  const headers = {
+    'Cookie': cookie,
+    'syscode': SYS_CODE,
+    'channel': CHANNEL,
+    'platform': PLATFORM,
+    'signature': sign,
+    'timestamp': ts,
+    'content-type': 'application/json',
+    'accept': 'application/json, text/plain, */*',
+    'origin': BASE,
+    'referer': BASE + '/up-member/newPoints',
+    'user-agent': UA
+  };
+  if (extraHeaders) for (const k in extraHeaders) headers[k] = extraHeaders[k];
+
   return $task.fetch({
-    url: url,
-    method: 'POST',
-    headers: {
-      'Cookie': cookie,
-      'syscode': SYS_CODE,
-      'channel': CHANNEL,
-      'platform': PLATFORM,
-      'signature': sign,
-      'timestamp': ts,
-      'content-type': 'application/json',
-      'accept': 'application/json, text/plain, */*',
-      'origin': BASE,
-      'referer': BASE + '/up-member/newPoints',
-      'user-agent': UA
-    },
+    url: url, method: 'POST', headers: headers,
     body: JSON.stringify(bodyObj || {})
   }).then(function (res) {
     let data = null;
@@ -195,17 +207,58 @@ function api(sess, url, bodyObj) {
   });
 }
 
-/* ---------------- 任务流水线 ---------------- */
-function buildSteps(sess) {
+/* ---------------- 判定 ---------------- */
+function judge(step, r) {
+  const d = r.data;
+  if (!d) return { state: 'fail', msg: 'HTTP ' + r.http + ' 非 JSON' };
+  if (d.errorCode === '100111') return { state: 'expired', msg: '会话失效' };
+  if (!d.success) return { state: 'fail', msg: clip(d.errorMessage || ('code ' + d.errorCode), 44) };
+  let msg = 'OK';
+  try { msg = String(step.parse ? step.parse(d) : 'OK'); } catch (e) { msg = 'OK'; }
+  return { state: 'ok', msg: msg, data: d };
+}
+
+function retryable(msg) {
+  return /token|权限验证|登录|鉴权/i.test(String(msg || ''));
+}
+
+// 依次尝试主方案与变体，遇到 token/权限类错误才换下一种
+function runStep(sess, step) {
+  const variants = [{ label: '', body: step.body, headers: step.headers }].concat(step.fallbacks || []);
+  let i = 0;
+
+  function next() {
+    const v = variants[i++];
+    const body = subst(v.body, sess.sessionId);
+    const hdr = v.headers ? subst(v.headers, sess.sessionId) : null;
+
+    return api(sess, step.url, body, hdr).then(function (r) {
+      const verdict = judge(step, r);
+      if (verdict.state === 'fail' && retryable(verdict.msg) && i < variants.length) return next();
+      if (verdict.state === 'ok' && v.label) verdict.msg += '（' + v.label + '）';
+      return verdict;
+    }).catch(function (err) {
+      return { state: 'fail', msg: clip(err && err.message || err, 44) };
+    });
+  }
+  return next();
+}
+
+/* ---------------- 流水线 ---------------- */
+function buildSteps() {
   const dev = deviceId();
   const day = new Date(Date.now() + 8 * 3600 * 1000).getUTCDate();
+  const infoBody = { sysCode: 'ESG-CEMP-CORE', optionalColumns: ['usablePoint', 'cycleSub', 'leavePoint'] };
 
   return [
     {
-      key: 'infoBefore', label: '积分(前)', url: EP.userInfo,
-      body: { sysCode: 'ESG-CEMP-CORE', optionalColumns: ['usablePoint', 'cycleSub', 'leavePoint'] },
-      silent: true,
-      parse: function (d) { return (d.obj && d.obj.usablePoint); }
+      key: 'infoBefore', label: '积分(前)', url: EP.userInfo, silent: true,
+      body: Object.assign({ token: APP_TOKEN }, infoBody),
+      fallbacks: [
+        { label: 'token=会话', body: Object.assign({ token: '__SID__' }, infoBody) },
+        { label: '无token', body: infoBody }
+      ],
+      parse: function (d) { return d.obj && d.obj.usablePoint; }
     },
     {
       key: 'sign', label: '签到', url: EP.sign,
@@ -225,8 +278,8 @@ function buildSteps(sess) {
       parse: function (d) {
         const list = (d.obj && d.obj.taskTitleLevels) || [];
         if (!list.length) return '无任务';
-        const done_ = list.filter(function (x) { return x.status === 1; }).length;
-        return '共 ' + list.length + ' 个，已完成 ' + done_ + ' 个';
+        const ok = list.filter(function (x) { return x.status === 1; }).length;
+        return '共 ' + list.length + ' 个，已完成 ' + ok + ' 个';
       }
     },
     {
@@ -250,6 +303,8 @@ function buildSteps(sess) {
     {
       key: 'coupon', label: '优惠券', url: EP.coupon,
       body: { pageNum: 1, pageSize: 20 },
+      headers: { token: '__SID__' },       // 该路径走 token 请求头
+      fallbacks: [{ label: '无token头', body: { pageNum: 1, pageSize: 20 }, headers: {} }],
       parse: function (d) {
         const o = d.obj;
         const arr = Array.isArray(o) ? o : (o && (o.list || o.records)) || [];
@@ -257,10 +312,13 @@ function buildSteps(sess) {
       }
     },
     {
-      key: 'infoAfter', label: '积分(后)', url: EP.userInfo,
-      body: { sysCode: 'ESG-CEMP-CORE', optionalColumns: ['usablePoint', 'cycleSub', 'leavePoint'] },
-      silent: true,
-      parse: function (d) { return (d.obj && d.obj.usablePoint); }
+      key: 'infoAfter', label: '积分(后)', url: EP.userInfo, silent: true,
+      body: Object.assign({ token: APP_TOKEN }, infoBody),
+      fallbacks: [
+        { label: 'token=会话', body: Object.assign({ token: '__SID__' }, infoBody) },
+        { label: '无token', body: infoBody }
+      ],
+      parse: function (d) { return d.obj && d.obj.usablePoint; }
     }
   ];
 }
@@ -272,7 +330,7 @@ function runTask() {
     return done();
   }
 
-  const steps = buildSteps(sess);
+  const steps = buildSteps();
   const results = [];
   let beforePoint = null;
   let expired = false;
@@ -283,31 +341,22 @@ function runTask() {
       if (expired) return;
       if (step.skip) { results.push({ label: step.label, state: 'skip', msg: step.skipReason }); return; }
 
-      return api(sess, step.url, step.body).then(function (r) {
-        const d = r.data;
-        if (!d) { results.push({ label: step.label, state: 'fail', msg: 'HTTP ' + r.http + ' 非 JSON' }); return; }
-
-        if (d.errorCode === '100111') {
+      return runStep(sess, step).then(function (v) {
+        if (v.state === 'expired') {
           expired = true;
-          results.push({ label: step.label, state: 'fail', msg: '会话失效' });
+          results.push({ label: step.label, state: 'fail', msg: v.msg });
           return;
         }
-        if (!d.success) {
-          results.push({ label: step.label, state: 'fail', msg: clip(d.errorMessage || ('code ' + d.errorCode), 40) });
-          return;
-        }
+        results.push({ label: step.label, state: v.state, msg: v.msg });
 
-        let msg = '';
-        try { msg = String(step.parse ? step.parse(d) : 'OK'); } catch (e) { msg = 'OK'; }
-        results.push({ label: step.label, state: 'ok', msg: msg, silent: !!step.silent });
-
-        if (step.key === 'infoBefore') beforePoint = d.obj && d.obj.usablePoint;
-        if (step.key === 'infoAfter' && typeof beforePoint === 'number' && typeof (d.obj && d.obj.usablePoint) === 'number') {
-          const delta = d.obj.usablePoint - beforePoint;
-          results.push({ label: '积分变化', state: 'ok', msg: (delta >= 0 ? '+' : '') + delta });
+        if (step.key === 'infoBefore' && v.data) beforePoint = v.data.obj && v.data.obj.usablePoint;
+        if (step.key === 'infoAfter' && v.data && typeof beforePoint === 'number') {
+          const after = v.data.obj && v.data.obj.usablePoint;
+          if (typeof after === 'number') {
+            const delta = after - beforePoint;
+            results.push({ label: '积分变化', state: 'ok', msg: (delta >= 0 ? '+' : '') + delta });
+          }
         }
-      }).catch(function (err) {
-        results.push({ label: step.label, state: 'fail', msg: clip(err && err.message || err, 40) });
       });
     });
   });
@@ -319,7 +368,6 @@ function runTask() {
     });
     if (expired) lines.push('⏭ 其余步骤：会话失效后跳过');
 
-    // 会话失效时给出明确指引，其余情况只报一次汇总
     if (expired) {
       notify('顺丰任务 · 会话失效', sess.mobile || '',
         '请重新打开小程序积分页，脚本会自动换新 sessionId\n' + lines.join('\n'));
