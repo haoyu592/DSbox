@@ -7,24 +7,9 @@
 ================ Surge 配置 ================
 [MITM]
 hostname = %APPEND% hope.demogic.com
-
 [Script]
-# 需要抓三个接口：资产(拿积分/签到状态)、签到动作(拿 body+header 供重放)、签到页装修(拿 enterpriseId 等参数)
-鸿星尔克Cookie = type=http-request,pattern=^https:\/\/hope\.demogic\.com\/gic-wx-app\/(get-member-asset\.json|sign\/member_sign\.json|page-custom\/member-sign(-page)?\.json),script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
-
-# cronexp 含空格必须用双引号包裹，否则参数解析会在 "15" 处截断
-鸿星尔克 = type=cron,cronexp="15 9 * * *",script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js,wake-system=true
-
-
-============ Quantumult X 配置 =============
-[MITM]
-hostname = hope.demogic.com
-
-[rewrite_local]
-^https:\/\/hope\.demogic\.com\/gic-wx-app\/(get-member-asset\.json|sign\/member_sign\.json|page-custom\/member-sign(-page)?\.json) url script-request-header https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
-
-[task_local]
-15 9 * * * https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js, tag=鸿星尔克, enabled=true
+鸿星尔克Cookie = type=http-request,pattern=^https:\/\/hope\.demogic\.com\/gic-wx-app\/get-member-asset\.json,script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
+鸿星尔克 = type=cron,cronexp="15 9 * * *",script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
 */
 
 const $ = new Env('鸿星尔克');
