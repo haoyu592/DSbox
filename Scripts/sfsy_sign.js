@@ -249,15 +249,19 @@ function buildSteps() {
   const dev = deviceId();
   const day = new Date(Date.now() + 8 * 3600 * 1000).getUTCDate();
   const infoBody = { sysCode: 'ESG-CEMP-CORE', optionalColumns: ['usablePoint', 'cycleSub', 'leavePoint'] };
+  // userInfo 的 token 到底放 body 还是请求头、取常量还是会话，未知，按序试到通过为止
+  const INFO_FALLBACKS = [
+    { label: 'token=会话', body: Object.assign({ token: '__SID__' }, infoBody) },
+    { label: '无token', body: infoBody },
+    { label: 'token头=会话', body: Object.assign({ token: APP_TOKEN }, infoBody), headers: { token: '__SID__' } },
+    { label: 'token头=会话/无body token', body: infoBody, headers: { token: '__SID__' } }
+  ];
 
   return [
     {
       key: 'infoBefore', label: '积分(前)', url: EP.userInfo, silent: true,
       body: Object.assign({ token: APP_TOKEN }, infoBody),
-      fallbacks: [
-        { label: 'token=会话', body: Object.assign({ token: '__SID__' }, infoBody) },
-        { label: '无token', body: infoBody }
-      ],
+      fallbacks: INFO_FALLBACKS,
       parse: function (d) { return d.obj && d.obj.usablePoint; }
     },
     {
@@ -314,10 +318,7 @@ function buildSteps() {
     {
       key: 'infoAfter', label: '积分(后)', url: EP.userInfo, silent: true,
       body: Object.assign({ token: APP_TOKEN }, infoBody),
-      fallbacks: [
-        { label: 'token=会话', body: Object.assign({ token: '__SID__' }, infoBody) },
-        { label: '无token', body: infoBody }
-      ],
+      fallbacks: INFO_FALLBACKS,
       parse: function (d) { return d.obj && d.obj.usablePoint; }
     }
   ];
