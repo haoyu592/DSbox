@@ -4,15 +4,6 @@
 环境变量：erke_data（Node 环境，多账号以 @ 隔开）
 更新时间：2026-10-29
 
-================ Surge 配置 ================
-[MITM]
-hostname = %APPEND% hope.demogic.com
- 
-[Script]
-鸿星尔克Cookie = type=http-request,pattern=^https:\/\/hope\.demogic\.com\/gic-wx-app\/get-member-asset\.json,script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
- 
-鸿星尔克 = type=cron,cronexp="15 9 * * *",script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
-
 ============ Quantumult X 配置 =============
 [MITM]
 hostname = hope.demogic.com
