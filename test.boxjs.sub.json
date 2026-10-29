@@ -55,6 +55,31 @@
                 "https://raw.githubusercontent.com/Orz-3/mini/master/Color/10010.png"
             ],
             "script": "https://raw.githubusercontent.com/haoyu592/DSbox/main/oil_script.js"
+        },{
+          "id": "erke",
+          "name": "鸿星尔克",
+          "keys": [
+            "erke_data"
+          ],
+          "settings": [
+            {
+              "id": "erke_data",
+              "name": "鸿星尔克数据",
+              "val": "",
+              "type": "text",
+              "placeholder": "https://hope.demogic.com/gic-wx-app/get-member-asset.json",
+              "autoGrow": true,
+              "rows": 3,
+              "desc": "打开鸿星尔克小程序「会员签到」页会自动写入；多账号用 @ 分隔"
+            }
+          ],
+          "author": "@haoyu592",
+          "repo": "https://github.com/haoyu592/DSbox/blob/main/Scripts/erke.js",
+          "script": "https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js",
+          "icons": [
+            "https://raw.githubusercontent.com/Former-Years/icon/master/erke.png",
+            "https://raw.githubusercontent.com/Former-Years/icon/master/erke.png"
+          ]
         }
     ]
 }
