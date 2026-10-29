@@ -7,15 +7,19 @@
 ================ Surge 配置 ================
 [MITM]
 hostname = %APPEND% hope.demogic.com
+ 
 [Script]
 鸿星尔克Cookie = type=http-request,pattern=^https:\/\/hope\.demogic\.com\/gic-wx-app\/get-member-asset\.json,script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
+ 
 鸿星尔克 = type=cron,cronexp="15 9 * * *",script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
 
 ============ Quantumult X 配置 =============
 [MITM]
 hostname = hope.demogic.com
+ 
 [rewrite_local]
 ^https:\/\/hope\.demogic\.com\/gic-wx-app\/get-member-asset\.json url script-request-header https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
+ 
 [task_local]
 15 9 * * * https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js, tag=鸿星尔克, enabled=true
 */
