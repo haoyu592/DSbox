@@ -12,7 +12,19 @@ hostname = %APPEND% hope.demogic.com
 # 需要抓三个接口：资产(拿积分/签到状态)、签到动作(拿 body+header 供重放)、签到页装修(拿 enterpriseId 等参数)
 鸿星尔克Cookie = type=http-request,pattern=^https:\/\/hope\.demogic\.com\/gic-wx-app\/(get-member-asset\.json|sign\/member_sign\.json|page-custom\/member-sign(-page)?\.json),script-path=<本脚本地址>
 
-鸿星尔克 = type=cron, cronexp=15 9 * * *, script-path=<本脚本地址>
+# cronexp 含空格必须用双引号包裹，否则参数解析会在 "15" 处截断
+鸿星尔克 = type=cron,cronexp="15 9 * * *",script-path=<本脚本地址>,wake-system=true
+
+
+============ Quantumult X 配置 =============
+[MITM]
+hostname = hope.demogic.com
+
+[rewrite_local]
+^https:\/\/hope\.demogic\.com\/gic-wx-app\/(get-member-asset\.json|sign\/member_sign\.json|page-custom\/member-sign(-page)?\.json) url script-request-header <本脚本地址>
+
+[task_local]
+15 9 * * * <本脚本地址>, tag=鸿星尔克, enabled=true
 */
 
 const $ = new Env('鸿星尔克');
