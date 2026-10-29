@@ -1,25 +1,16 @@
 /*
-脚本名称：鸿星尔克签到（诊断修复版 v2）
+脚本名称：鸿星尔克签到
 活动入口：鸿星尔克小程序
 环境变量：erke_data（Node 环境，多账号以 @ 隔开）
 更新时间：2026-10-29
-
-================ 相对原脚本的修复点 ================
-1. 结果判定兼容 code / errcode 两种返回格式（原版只认 code === '0'，接口返回
-   {"errcode":-1,"errmsg":"参数异常"} 时只会显示「签到失败: undefined」）
-2. 抓包时同时保存请求 headers，签到/查积分时原样带回（GIC 网关现在校验 header）
-3. 查积分改用固定接口 + 抓包 headers，不再复用带过期 sign/timestamp 的旧 URL
-4. 用资产接口 D021（是否已签到）、D022（连签天数）作为签到结果佐证，避免假失败
-5. 抓包覆盖改为数组重建，修复 savedData.replace() 误替换多账号片段的问题
-6. 失败时打印原始响应（erke_debug=true 打开完整日志），便于定位
 
 ================ Surge 配置 ================
 [MITM]
 hostname = %APPEND% hope.demogic.com
 
 [Script]
-# 建议同时抓「资产」和「签到」两个请求，签到请求会连 body 一起存下来做重放
-鸿星尔克Cookie = type=http-request,pattern=^https:\/\/hope\.demogic\.com\/gic-wx-app\/(get-member-asset|sign\/member_sign)\.json,script-path=<本脚本地址>
+# 需要抓三个接口：资产(拿积分/签到状态)、签到动作(拿 body+header 供重放)、签到页装修(拿 enterpriseId 等参数)
+鸿星尔克Cookie = type=http-request,pattern=^https:\/\/hope\.demogic\.com\/gic-wx-app\/(get-member-asset\.json|sign\/member_sign\.json|page-custom\/member-sign(-page)?\.json),script-path=<本脚本地址>
 
 鸿星尔克 = type=cron, cronexp=15 9 * * *, script-path=<本脚本地址>
 */
@@ -28,7 +19,8 @@ const $ = new Env('鸿星尔克');
 const notify = (() => { try { return $.isNode() ? require('./sendNotify') : null } catch (e) { return null } })();
 
 const API_HOST = 'https://hope.demogic.com';
-const SIGN_PATH = '/gic-wx-app/sign/member_sign.json';
+const SIGN_PATH = '/gic-wx-app/sign/member_sign.json';           // 旧签到接口（已失效，保留兜底）
+const SIGN_PATH_NEW = '/gic-wx-app/page-custom/member-sign.json'; // 新签到接口（page-custom 路由族）
 const ASSET_PATH = '/gic-wx-app/get-member-asset.json';
 const KEY_erke_data = 'erke_data';
 const KEY = KEY_erke_data;
@@ -73,7 +65,15 @@ async function main() {
 function captureRequest() {
   const url = $request.url;
   const headers = cleanHeaders($request.headers || $request.header || {});
-  const params = parseQuery(url.split('?')[1] || '');
+  const rawBody = typeof $request.body === 'string' ? $request.body : '';
+  // 新版 page-custom 接口的参数放在 POST body 里，必须一并解析
+  let bodyParams = {};
+  if (rawBody) {
+    try { bodyParams = JSON.parse(rawBody); }
+    catch (e) { bodyParams = parseQuery(rawBody); }
+    if (!bodyParams || typeof bodyParams !== 'object') bodyParams = {};
+  }
+  const params = Object.assign({}, parseQuery(url.split('?')[1] || ''), bodyParams);
   const memberId = params.memberId || params.cliqueMemberId || '';
 
   if (!memberId) {
@@ -85,18 +85,20 @@ function captureRequest() {
   const idx = list.findIndex((it) => it.memberId === memberId);
   const old = idx >= 0 ? list[idx] : {};
 
-  const isSign = /member_sign/.test(url);
+  // 只有真正的签到动作接口才按 sign 处理；页面装修接口 member-sign-page 不算
+  const isSign = /page-custom\/member-sign\.json|sign\/member_sign\.json/.test(url);
+  const isAsset = /get-member-asset\.json/.test(url);
+
   const entry = {
     memberId,
-    // 抓签到请求时不要把已存的资产 URL 覆盖成空
-    assetUrl: isSign ? (old.assetUrl || '') : url,
-    signUrl: isSign ? url.split('?')[0] : (old.signUrl || `${API_HOST}${SIGN_PATH}`),
+    assetUrl: isAsset ? url : (old.assetUrl || ''),
+    signUrl: isSign ? url.split('?')[0] : (old.signUrl || `${API_HOST}${SIGN_PATH_NEW}`),
     headers,
     params,
   };
   // 抓到的是签到 POST，就把 body 一并存下来，运行时可直接重放
-  if (isSign && $request.body) {
-    entry.signBody = typeof $request.body === 'string' ? $request.body : $.toStr($request.body);
+  if (isSign && rawBody) {
+    entry.signBody = rawBody;
   } else if (old.signBody) {
     entry.signBody = old.signBody;
   }
@@ -175,36 +177,57 @@ function saveAccounts(list) {
 async function runAccount(no, acc) {
   const lines = [];
   try {
-    const body = acc.signBody || $.toStr(buildSignBody(acc.params));
-    const signResp = await postJSON(acc.signUrl || `${API_HOST}${SIGN_PATH}`, acc.headers, body);
-
-    if (DEBUG) console.log(`[账号${no}] 签到原始响应: ${$.toStr(signResp)}`);
-
-    if (isOk(signResp)) {
-      const earned = sumIntegral(signResp);
-      const already = /已签|重复/.test(pickMsg(signResp));
-      lines.push(earned > 0 ? `🎉 签到成功: 积分 +${earned}`
-        : (already ? `✅ 今日已签到（${pickMsg(signResp) || '无需重复签到'}）` : `🎉 签到成功${pickMsg(signResp) ? ': ' + pickMsg(signResp) : ''}`));
-    } else {
-      lines.push(`❌ 签到失败: ${pickMsg(signResp) || '接口无返回信息'} (code=${pickCode(signResp) || '无'})`);
+    if (!acc.params || !acc.params.enterpriseId) {
+      lines.push('⚠️ 缺少 enterpriseId：请在鸿星尔克小程序里打开「会员签到」页重新抓一次包');
     }
 
-    // 查积分：固定接口 + 抓包 headers，兼容旧数据里的 assetUrl
-    try {
-      const assetUrl = `${API_HOST}${ASSET_PATH}?${$.queryStr(acc.params)}`;
-      const asset = await getJSON(assetUrl, acc.headers);
-      if (DEBUG) console.log(`[账号${no}] 资产原始响应: ${$.toStr(asset)}`);
-      const r = asset && asset.result;
-      if (r) {
-        lines.push(`🎉 当前积分: ${r.D007 === undefined ? 0 : r.D007}`);
-        const signFlag = String(r.D021) === '1' ? '已签到' : '未签到';
-        lines.push(`📅 今日状态: ${signFlag}｜连签 ${r.D022 || 0} 天`);
-      } else {
-        lines.push(`⚠️ 积分查询异常: ${pickMsg(asset) || 'result 为空'}`);
+    // 1. 先查资产拿今日签到状态，D021 才是最终判定依据（接口报错不代表没签到）
+    const before = await fetchAsset(no, acc, lines);
+    if (before && String(before.D021) === '1') {
+      lines.push('✅ 今日已签到，无需重复');
+      pushAsset(lines, before);
+      return;
+    }
+
+    // 2. 未签到 → 打签到接口
+    const attempts = buildSignAttempts(acc);
+    let ok = null;
+    let lastFail = '';
+    for (const at of attempts) {
+      try {
+        const resp = await postJSON(at.url, acc.headers, at.body);
+        if (DEBUG) console.log(`[账号${no}][${at.label}] ${$.toStr(resp)}`);
+        if (isOk(resp)) { ok = { at, resp }; break; }
+        lastFail = pickMsg(resp) || '';
+        lines.push(`· ${at.label} → ${lastFail || '无返回'} (code=${pickCode(resp) || '无'})`);
+      } catch (e) {
+        lastFail = e.message;
+        lines.push(`· ${at.label} → ${e.message}`);
       }
-    } catch (e) {
-      lines.push(`⚠️ 积分查询失败: ${e.message}`);
     }
+
+    if (ok) {
+      const earned = sumIntegral(ok.resp) || extractIntegral(ok.resp);
+      lines.push(earned > 0 ? `🎉 签到成功: 积分 +${earned}` : '🎉 签到成功');
+    } else {
+      // 3. 签到接口失败时复查询，用服务端状态兜底，避免"签到了却报失败"
+      const after = await fetchAsset(no, acc, []);
+      if (after && String(after.D021) === '1') {
+        lines.push('✅ 签到已生效（接口虽报错，服务端状态为已签到）');
+      } else if (/签名/.test(lastFail)) {
+        lines.push('❌ 签到失败: 接口要求动态签名（服务端密钥，离线无法计算）');
+        lines.push('💡 请在小程序里手动签到，让脚本抓到真实请求后自动重放');
+      } else {
+        lines.push(`❌ 签到失败: ${lastFail || '以上接口均未通过'}`);
+        lines.push('💡 可先在小程序里手动签到一次');
+      }
+      if (after) { pushAsset(lines, after); return; }
+    }
+
+    // 4. 兜底刷新状态
+    const now = await fetchAsset(no, acc, []);
+    if (now) pushAsset(lines, now);
+    else if (before) pushAsset(lines, before);
   } catch (e) {
     lines.push(`❌ 执行失败: ${e && e.message ? e.message : e}`);
   } finally {
@@ -213,7 +236,74 @@ async function runAccount(no, acc) {
   }
 }
 
+// 查资产（D007 可用积分 / D021 是否已签到 / D022 连签天数）
+async function fetchAsset(no, acc, lines) {
+  try {
+    const url = buildAssetUrl(acc);
+    if (DEBUG) console.log(`[账号${no}] 积分请求 URL: ${url}`);
+    const resp = await getJSON(url, acc.headers);
+    if (DEBUG) console.log(`[账号${no}] 资产响应: ${$.toStr(resp)}`);
+    if (resp && resp.result) return resp.result;
+    if (lines) lines.push(`⚠️ 积分查询异常: ${pickMsg(resp) || 'result 为空'}`);
+    return null;
+  } catch (e) {
+    if (lines) lines.push(`⚠️ 积分查询失败: ${e.message}`);
+    return null;
+  }
+}
+
+function pushAsset(lines, r) {
+  lines.push(`🎉 当前积分: ${r.D007 === undefined || r.D007 === null ? 0 : r.D007}`);
+  const flag = String(r.D021) === '1' ? '已签到' : '未签到';
+  lines.push(`📅 今日状态: ${flag}｜连签 ${r.D022 || 0} 天`);
+}
+
 /* ---------------- 请求构造与判定 ---------------- */
+
+// 签到只有 sign/member_sign 一个真实接口（page-custom/member-sign 实测不存在，返回 910009 URL错误）
+// 它强制校验 body 里的 sign，离线算不出来 → 必须靠抓包重放
+function buildSignAttempts(acc) {
+  const list = [];
+  if (acc.signBody) {
+    list.push({ label: '重放抓包 ' + shortPath(acc.signUrl), url: acc.signUrl, body: acc.signBody });
+  }
+  list.push({ label: 'sign/member_sign', url: `${API_HOST}${SIGN_PATH}`, body: $.toStr(buildPageBody(acc.params)) });
+  return list;
+}
+
+function shortPath(u) {
+  const m = String(u || '').match(/gic-wx-app\/([^?]+)/);
+  return m ? m[1] : 'unknown';
+}
+
+// 全参数透传（新版接口/重放都用这套），保留 undefined 过滤
+function buildPageBody(p) {
+  const out = {};
+  Object.keys(p || {}).forEach((k) => {
+    if (p[k] !== undefined && p[k] !== null && p[k] !== '') out[k] = p[k];
+  });
+  if (!out.source) out.source = 'wxapp';
+  return out;
+}
+
+// 从签到响应里递归捞积分字段（新接口结构未知，多关键词兜底）
+function extractIntegral(resp, depth = 0) {
+  if (!resp || typeof resp !== 'object' || depth > 4) return 0;
+  const keys = ['integral', 'point', 'points', 'score', 'signIntegral', 'awardIntegral', 'totalIntegral'];
+  for (const k of keys) {
+    const v = resp[k];
+    if (typeof v === 'number' && v > 0) return v;
+    if (typeof v === 'string' && /^\d+$/.test(v) && Number(v) > 0) return Number(v);
+  }
+  for (const k of Object.keys(resp)) {
+    const v = resp[k];
+    if (v && typeof v === 'object') {
+      const n = extractIntegral(v, depth + 1);
+      if (n > 0) return n;
+    }
+  }
+  return 0;
+}
 
 function buildSignBody(p) {
   return {
@@ -270,7 +360,8 @@ function sumIntegral(resp) {
 
 function postJSON(url, headers, body) {
   return new Promise((resolve, reject) => {
-    $.post({ url, headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }), body, timeout: 20000 }, (err, resp, data) => {
+    const target = sanitizeUrl(url) || `${API_HOST}${SIGN_PATH}`;
+    $.post({ url: target, headers: Object.assign({}, headers, { 'Content-Type': 'application/json' }), body, timeout: 20000 }, (err, resp, data) => {
       if (err) return reject(new Error(`签到请求失败: ${err}`));
       try { resolve(JSON.parse(data)); }
       catch (e) { reject(new Error(`签到响应非 JSON: ${String(data).slice(0, 200)}`)); }
@@ -280,12 +371,57 @@ function postJSON(url, headers, body) {
 
 function getJSON(url, headers) {
   return new Promise((resolve, reject) => {
-    $.get({ url, headers, timeout: 20000 }, (err, resp, data) => {
+    const target = sanitizeUrl(url);
+    if (!target) return reject(new Error(`URL 非法: ${String(url).slice(0, 120)}`));
+    $.get({ url: target, headers, timeout: 20000 }, (err, resp, data) => {
       if (err) return reject(new Error(`${err}`));
       try { resolve(JSON.parse(data)); }
       catch (e) { reject(new Error(`响应非 JSON: ${String(data).slice(0, 200)}`)); }
     });
   });
+}
+
+// 组装积分查询 URL：能用抓到的原始 URL 就不重建，重建时严格编码
+function buildAssetUrl(acc) {
+  const p = acc.params || {};
+  // 实测最小必需参数只有三个：dataIconKeyList + memberId + enterpriseId
+  // appid/sign/random/timestamp/transId/openid/unionid 全省略也返回同样数据，且永不过期
+  const need = {
+    dataIconKeyList: 'D007,D021,D022',
+    memberId: p.memberId,
+    enterpriseId: p.enterpriseId,
+  };
+  if (need.memberId && need.enterpriseId) {
+    const url = `${API_HOST}${ASSET_PATH}?${encodeQuery(need)}`;
+    if (sanitizeUrl(url)) return url;
+  }
+
+  const raw = sanitizeUrl(acc.assetUrl);
+  if (raw && raw.includes('/get-member-asset.json')) return raw;
+
+  const qs = encodeQuery(p);
+  const url = `${API_HOST}${ASSET_PATH}${qs ? '?' + qs : ''}`;
+  if (!sanitizeUrl(url)) throw new Error(`积分 URL 组装失败: ${url}`);
+  return url;
+}
+
+// 参数编码：decodeURIComponent 解析过的值必须重新编码，否则 + & = 空格 会破坏 URL
+function encodeQuery(params) {
+  if (!params) return '';
+  return Object.keys(params)
+    .filter((k) => params[k] !== undefined && params[k] !== null && params[k] !== '')
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(params[k]))}`)
+    .join('&');
+}
+
+// 清理 URL：去空白、去尾部 ? / &、去 hash、编码空格与中文，非法返回 ''
+function sanitizeUrl(u) {
+  if (!u || typeof u !== 'string') return '';
+  let s = u.trim().replace(/\s+/g, '%20').replace(/#.*$/, '');
+  s = s.replace(/[?&]+$/, '');
+  if (!/^https?:\/\/[^/]+/i.test(s)) return '';
+  if (/[^\x21-\x7E]/.test(s)) return ''; // 仍含非 ASCII，Surge 会判 bad url
+  return s;
 }
 
 function parseQuery(qs) {
