@@ -17,6 +17,8 @@
 	6. me() 区分错误码, 仅 -101/-111 清库, 风控与网络异常保留 cookie
 	7. 修复 string2object 对含 "=" 的 cookie 值截断问题
 	8. 未携带 cookie / 缺少登录字段的请求改为静默跳过, 不再推送通知
+	9. cookie 未失效时原版完全静默, 现改为每天首次确认推送一次「cookie 有效」,
+	   当日重复抓取仍只记日志, 兼顾可见性与通知频率
 注意事项:
 	抓取cookie时注意保证账号登录状态;
 	账号内须有一定数量的关注数，否则无法完成投币;
@@ -146,6 +148,15 @@ const persistentStore = config => {
 		!isSameUser && (config = PStoreConfig?.Settings ? {...config, Settings: PStoreConfig.Settings} : config)
 		config.FirstInsert = false
 	} else if (PStoreConfig.cookie) {
+		// 登录态无变化时原版完全静默, 用户无法确认抓取链路是否生效
+		// 改为每天首次确认推送一次, 当日其余重复抓取仅记日志, 避免每次切前台都弹通知
+		const today = $.time("yyyy-MM-dd")
+		if (PStoreConfig.lastOkDate !== today) {
+			config.lastOkDate = today
+			$.setItem($.name + "_daily_bonus", $.toStr(config))
+			$.msg($.name, "✅ cookie 有效", `登录态正常, 无需更新\n确认时间: ${format()}`)
+			$.log("- cookie 有效, 今日首次确认已提醒")
+		}
 		return $.log("- cookie未失效,无需更新")
 	} else {
 		config.FirstInsert = true

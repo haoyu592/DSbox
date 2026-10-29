@@ -1,6 +1,6 @@
 {
     "id": "haoyu592.test.sub",
-    "name": "Test数据配置",
+    "name": "自用数据配置",
     "author": "@haoyu592",
     "icon": "https://raw.githubusercontent.com/haoyu592/DSbox/main/Old/test.png",
     "repo": "https://github.com/haoyu592",
@@ -56,6 +56,7 @@
             ],
             "script": "https://raw.githubusercontent.com/haoyu592/DSbox/main/oil_script.js"
         },{
+          "author": "@haoyu592",
           "id": "erke",
           "name": "鸿星尔克",
           "keys": [
