@@ -35,7 +35,8 @@ const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/6
 
 const EP = {
   userInfo: BASE + '/mcs-mimp/commonPost/~memberIntegral~userInfoService~queryUserInfo',
-  sign: BASE + '/mcs-mimp/commonPost/~memberNonactivity~integralTaskSignPlusService~automaticSignFetchPackage',
+  signV2: BASE + '/mcs-mimp/commonPost/~memberNonactivity~integralSignV2Service~sign',
+  signV1: BASE + '/mcs-mimp/commonPost/~memberNonactivity~integralTaskSignPlusService~automaticSignFetchPackage',
   taskList: BASE + '/mcs-mimp/commonPost/~memberNonactivity~integralTaskStrategyService~queryPointTaskAndSignFromES',
   welfare: BASE + '/mcs-mimp/commonPost/~memberActLengthy~redPacketActivityService~superWelfare~receiveRedPacket',
   memberDay: BASE + '/mcs-mimp/commonPost/~memberNonactivity~memberDayIndexService~index',
@@ -212,7 +213,14 @@ function judge(step, r) {
   const d = r.data;
   if (!d) return { state: 'fail', msg: 'HTTP ' + r.http + ' 非 JSON' };
   if (d.errorCode === '100111') return { state: 'expired', msg: '会话失效' };
-  if (!d.success) return { state: 'fail', msg: clip(d.errorMessage || ('code ' + d.errorCode), 44) };
+  if (!d.success) {
+    // 业务性「非失败」：如签到接口对已签到返回 3400002
+    if (step.softFail) {
+      const soft = step.softFail(d);
+      if (soft) return { state: 'ok', msg: soft, data: d };
+    }
+    return { state: 'fail', msg: clip(d.errorMessage || ('code ' + d.errorCode), 44) };
+  }
   let msg = 'OK';
   try { msg = String(step.parse ? step.parse(d) : 'OK'); } catch (e) { msg = 'OK'; }
   return { state: 'ok', msg: msg, data: d };
@@ -222,9 +230,9 @@ function retryable(msg) {
   return /token|权限验证|登录|鉴权/i.test(String(msg || ''));
 }
 
-// 依次尝试主方案与变体，遇到 token/权限类错误才换下一种
+// 依次尝试主方案与变体；变体可覆盖 url（如签到 V2 → V1 兜底）
 function runStep(sess, step) {
-  const variants = [{ label: '', body: step.body, headers: step.headers }].concat(step.fallbacks || []);
+  const variants = [{ label: '', url: step.url, body: step.body, headers: step.headers }].concat(step.fallbacks || []);
   let i = 0;
 
   function next() {
@@ -232,9 +240,10 @@ function runStep(sess, step) {
     const body = subst(v.body, sess.sessionId);
     const hdr = v.headers ? subst(v.headers, sess.sessionId) : null;
 
-    return api(sess, step.url, body, hdr).then(function (r) {
+    return api(sess, v.url || step.url, body, hdr).then(function (r) {
       const verdict = judge(step, r);
-      if (verdict.state === 'fail' && retryable(verdict.msg) && i < variants.length) return next();
+      const nextIsForced = variants[i] && variants[i].retryOnAny;
+      if (verdict.state === 'fail' && i < variants.length && (nextIsForced || retryable(verdict.msg))) return next();
       if (verdict.state === 'ok' && v.label) verdict.msg += '（' + v.label + '）';
       return verdict;
     }).catch(function (err) {
@@ -249,13 +258,8 @@ function buildSteps() {
   const dev = deviceId();
   const day = new Date(Date.now() + 8 * 3600 * 1000).getUTCDate();
   const infoBody = { sysCode: 'ESG-CEMP-CORE', optionalColumns: ['usablePoint', 'cycleSub', 'leavePoint'] };
-  // userInfo 的 token 到底放 body 还是请求头、取常量还是会话，未知，按序试到通过为止
-  const INFO_FALLBACKS = [
-    { label: 'token=会话', body: Object.assign({ token: '__SID__' }, infoBody) },
-    { label: '无token', body: infoBody },
-    { label: 'token头=会话', body: Object.assign({ token: APP_TOKEN }, infoBody), headers: { token: '__SID__' } },
-    { label: 'token头=会话/无body token', body: infoBody, headers: { token: '__SID__' } }
-  ];
+  // 实测：body.token 必须是固定常量，放会话 id 或不放都会报「权限验证失败,token错误」
+  const INFO_FALLBACKS = [{ label: '无token', body: infoBody }];
 
   return [
     {
@@ -265,30 +269,40 @@ function buildSteps() {
       parse: function (d) { return d.obj && d.obj.usablePoint; }
     },
     {
-      key: 'sign', label: '签到', url: EP.sign,
-      body: { comeFrom: 'vioin', channelFrom: 'SFAPP' },
+      key: 'sign', label: '签到', url: EP.signV2,
+      body: {},
+      // 已签到走 3400002「今日已签到~」，属正常态
+      softFail: function (d) {
+        return /已签到/.test(String(d.errorMessage || '')) ? '今日已签到' : null;
+      },
+      // V2 异常时回落到 V1 领取接口
+      fallbacks: [{ label: 'V1兜底', url: EP.signV1, body: { comeFrom: 'vioin', channelFrom: 'SFAPP' }, retryOnAny: true }],
       parse: function (d) {
         const o = d.obj || {};
         if (o.hasFinishSign === 1) return '今日已签到（连续 ' + (o.countDay || '?') + ' 天）';
         const list = (o.integralTaskSignPackageVOList || []).map(function (x) {
           return (x.packetName || '') + '×' + (x.commodityCount || 1);
         }).filter(Boolean).join('、');
-        return list ? '签到成功，获得 ' + list : '签到完成';
+        if (list) return '签到成功，获得 ' + list;
+        return o.countDay ? '签到成功（连续 ' + o.countDay + ' 天）' : '签到成功';
       }
     },
     {
       key: 'tasks', label: '积分任务', url: EP.taskList,
       body: { deviceId: dev, channelType: '3' },
       parse: function (d) {
-        const list = (d.obj && d.obj.taskTitleLevels) || [];
-        if (!list.length) return '无任务';
-        const ok = list.filter(function (x) { return x.status === 1; }).length;
-        return '共 ' + list.length + ' 个，已完成 ' + ok + ' 个';
+        const o = d.obj || {};
+        const list = o.taskTitleLevels || [];
+        const done = list.filter(function (x) { return x.status === 1; }).length;
+        const point = (typeof o.totalPoint === 'number') ? '，总积分 ' + o.totalPoint : '';
+        return list.length ? '共 ' + list.length + ' 个，已完成 ' + done + ' 个' + point : ('无任务' + point);
       }
     },
     {
       key: 'welfare', label: '超值福利', url: EP.welfare,
       body: {},
+      skip: true,
+      skipReason: '接口参数未确认（空 body 返回 999999），已默认关闭',
       parse: function (d) {
         const o = d.obj || {};
         return o.point ? '领取 ' + o.point + ' 积分' : '已处理';
@@ -301,14 +315,14 @@ function buildSteps() {
       skipReason: '非会员日（' + day + ' 号，仅 26-28）',
       parse: function (d) {
         const o = d.obj || {};
-        return '抽奖机会 ' + (o.lotteryNum === undefined ? '-' : o.lotteryNum) + ' 次';
+        const st = o.actStatus;
+        const stText = st === undefined ? '' : '，状态 ' + st;
+        return '抽奖机会 ' + (o.lotteryNum === undefined ? '-' : o.lotteryNum) + ' 次' + stText;
       }
     },
     {
       key: 'coupon', label: '优惠券', url: EP.coupon,
       body: { pageNum: 1, pageSize: 20 },
-      headers: { token: '__SID__' },       // 该路径走 token 请求头
-      fallbacks: [{ label: '无token头', body: { pageNum: 1, pageSize: 20 }, headers: {} }],
       parse: function (d) {
         const o = d.obj;
         const arr = Array.isArray(o) ? o : (o && (o.list || o.records)) || [];
