@@ -192,7 +192,15 @@ async function runAccount(no, acc) {
     const attempts = buildSignAttempts(acc);
     let ok = null;
     let lastFail = '';
+    let skipped = false;
     for (const at of attempts) {
+      if (at.skip) {
+        skipped = true;
+        const span = at.age < 60 ? `${at.age} 秒` : `${Math.round(at.age / 60)} 分钟`;
+        lines.push(`⏰ 抓到的签名已是 ${span}前，超过时效（约 2 分钟），跳过重放`);
+        lastFail = '签名已过期';
+        continue;
+      }
       try {
         const resp = await postJSON(at.url, acc.headers, at.body);
         if (DEBUG) console.log(`[账号${no}][${at.label}] ${$.toStr(resp)}`);
@@ -214,7 +222,7 @@ async function runAccount(no, acc) {
       if (after && String(after.D021) === '1') {
         lines.push('✅ 签到已生效（接口虽报错，服务端状态为已签到）');
       } else if (/已过期/.test(lastFail)) {
-        lines.push('⏰ 签名已过期: 抓到的签名超出时效窗口，无法重放');
+        if (!skipped) lines.push('⏰ 签名已过期: 抓到的签名超出时效窗口，无法重放');
         lines.push('💡 请在小程序里点一次签到，脚本会捕获当次请求');
       } else if (/签名/.test(lastFail)) {
         lines.push('❌ 签到失败: 签名与服务端要求不一致');
@@ -264,11 +272,33 @@ function pushAsset(lines, r) {
 /* ---------------- 请求构造与判定 ---------------- */
 
 // 签到只有 sign/member_sign 一个真实接口（page-custom/member-sign 实测不存在，返回 910009 URL错误）
-// 它强制校验 body 里的 sign，离线算不出来 → 必须靠抓包重放
+// 它强制校验 body 里的 sign，且签名与 timestamp 绑定、实测 2 分钟内即失效 → 重放基本不可行
+const SIGN_TTL_SEC = 120;
+
+// 解析抓包 body 里的 timestamp 距现在的秒数，解析失败返回 null
+function signBodyAge(body) {
+  try {
+    const o = JSON.parse(body);
+    const raw = String(o.timestamp || '').trim();
+    if (!raw) return null;
+    // 格式为 "2026-10-30 20:32:07"，iOS Safari 需替换成斜杠
+    const t = Date.parse(raw.replace(/-/g, '/'));
+    if (!t) return null;
+    return Math.round((Date.now() - t) / 1000);
+  } catch (e) {
+    return null;
+  }
+}
+
 function buildSignAttempts(acc) {
   const list = [];
   if (acc.signBody) {
-    list.push({ label: '重放抓包 ' + shortPath(acc.signUrl), url: acc.signUrl, body: acc.signBody });
+    const age = signBodyAge(acc.signBody);
+    if (age === null || age <= SIGN_TTL_SEC) {
+      list.push({ label: '重放抓包 ' + shortPath(acc.signUrl), url: acc.signUrl, body: acc.signBody });
+    } else {
+      list.push({ label: '跳过重放', skip: true, age });
+    }
   }
   list.push({ label: 'sign/member_sign', url: `${API_HOST}${SIGN_PATH}`, body: $.toStr(buildPageBody(acc.params)) });
   return list;
