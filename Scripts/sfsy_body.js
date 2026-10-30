@@ -22,6 +22,10 @@ function nowStr() {
   return d.toISOString().replace('T', ' ').slice(0, 19);
 }
 
+function log(s) {
+  try { console.log(String(s)); } catch (e) { }
+}
+
 function clip(s, n) {
   s = (s === undefined || s === null) ? '' : String(s);
   return s.length > n ? s.slice(0, n) + '…' : s;
@@ -64,6 +68,9 @@ function capture() {
     try {
       $notify('顺丰 body · ' + (req.method || 'POST').toUpperCase(), name, clip(body, MAX_NOTIFY) || '（空 body）');
     } catch (e) { }
+    log('[顺丰body][捕获] ' + (req.method || 'POST').toUpperCase() + ' ' + name + ' body=' + (body || '（空）'));
+  } else {
+    log('[顺丰body][跳过] 重复内容 ' + name);
   }
   return done({});
 }
@@ -72,13 +79,16 @@ function dump() {
   const list = readList();
   if (!list.length) {
     try { $notify('顺丰 body · 无数据', '先打开小程序积分页', '捕获规则需为 script-request-body'); } catch (e) { }
+    log('[顺丰body][导出] 无数据');
     return done();
   }
+  log('[顺丰body][导出] 共 ' + list.length + ' 条');
   const lines = [];
   list.forEach(function (x, i) {
     lines.push('#' + (i + 1) + ' ' + x.method + ' ' + x.name);
     lines.push(x.body || '（空）');
     lines.push('');
+    log('#' + (i + 1) + ' ' + x.method + ' ' + x.name + ' → ' + (x.body || '（空）'));
   });
 
   const chunks = [];

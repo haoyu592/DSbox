@@ -1,24 +1,6 @@
 /*
- * 顺丰会员中心 · 每日任务（Cookie 版）
- *
- * 采集：http-request 阶段从 mcs-mimp-web 的请求里取 Cookie 的 sessionId / JSESSIONID
- * 执行：定时任务阶段按顺序跑任务流水线，逐条汇报结果
- *
- * 鉴权模型（2026-10-29 实测）：
- *   身份 = Cookie 的 sessionId（= JSESSIONID）
- *   signature = MD5("token=wwesldfs29aniversaryvdld29&timestamp=<13位ms>&sysCode=MCS-MIMP-CORE")
- *   部分接口另需 token：userInfoService 要 body.token，coupon 走 token 请求头
- *   所以脚本对这两步内置「变体重试」：主方案失败且报错含 token/权限验证 时自动换下一种，
- *   成功的方案会标注在结果里，便于确认到底哪种对。
- *
- * 任务流水线（对齐 sfsy.js 主流程）：
- *   1 积分(前) ~memberIntegral~userInfoService~queryUserInfo
- *   2 签到     ~integralTaskSignPlusService~automaticSignFetchPackage   ✅ 端到端实测
- *   3 积分任务 ~integralTaskStrategyService~queryPointTaskAndSignFromES
- *   4 超值福利 ~memberActLengthy~redPacketActivityService~superWelfare~receiveRedPacket
- *   5 会员日   ~memberDayIndexService~index（仅 26-28 号）
- *   6 优惠券   /mcs-mimp/coupon/available/list
- *   7 积分(后) 同 1
+ * 顺丰会员中心 · 每日任务
+ * 采集 Cookie 的 sessionId → 定时跑 签到 / 积分任务 / 会员日 / 优惠券，结果走通知 + 日志
  */
 
 (function () {
@@ -26,7 +8,7 @@
 
 const SESSION_KEY = 'sfsy_session';
 const SALT = 'wwesldfs29aniversaryvdld29';
-const APP_TOKEN = 'zeTLTYeG0bLetfRk';   // 小程序 queryUserInfo 请求体里的固定 token
+const APP_TOKEN = 'zeTLTYeG0bLetfRk';
 const SYS_CODE = 'MCS-MIMP-CORE';
 const CHANNEL = 'mypoint';
 const PLATFORM = 'MINI_PROGRAM';
@@ -43,7 +25,6 @@ const EP = {
   coupon: BASE + '/mcs-mimp/coupon/available/list'
 };
 
-/* ---------------- MD5 ---------------- */
 function md5(s) {
   function rotl(x, n) { return (x << n) | (x >>> (32 - n)); }
   function add(a, b) { return (a + b) & 0xFFFFFFFF; }
@@ -94,7 +75,6 @@ function md5(s) {
   return hex(a0) + hex(b0) + hex(c0) + hex(d0);
 }
 
-/* ---------------- 工具 ---------------- */
 function nowStr() {
   const d = new Date(Date.now() + 8 * 3600 * 1000);
   return d.toISOString().replace('T', ' ').slice(0, 19);
@@ -127,11 +107,14 @@ function notify(title, sub, body) {
   try { $notify(title, sub || '', body || ''); } catch (e) { }
 }
 
+function log(s) {
+  try { console.log(String(s)); } catch (e) { }
+}
+
 function done(payload) {
   try { $done(payload || {}); } catch (e) { }
 }
 
-// 递归替换 __SID__ 占位符
 function subst(v, sid) {
   if (typeof v === 'string') return v === '__SID__' ? sid : v;
   if (Array.isArray(v)) return v.map(function (x) { return subst(x, sid); });
@@ -155,7 +138,6 @@ function deviceId() {
   return out;
 }
 
-/* ---------------- 采集模式 ---------------- */
 function capture() {
   const h = $request.headers || {};
   const ck = parseCookie(h['Cookie'] || h['cookie'] || '');
@@ -172,10 +154,11 @@ function capture() {
     savedAt: nowStr()
   });
   notify('顺丰任务 · 已捕获会话', (ck['_login_mobile_'] || '') + ' ' + sid.slice(0, 8) + '…', 'savedAt ' + nowStr());
+  log('[顺丰][采集] ' + nowStr() + ' 捕获 sessionId=' + sid.slice(0, 8) + '… mobile=' + (ck['_login_mobile_'] || '-') +
+    ' (旧值 ' + (prev ? (prev.sessionId || '').slice(0, 8) + '…' : '无') + ')');
   return done({});
 }
 
-/* ---------------- 请求 ---------------- */
 function api(sess, url, bodyObj, extraHeaders) {
   const ts = String(Date.now());
   const sign = md5('token=' + SALT + '&timestamp=' + ts + '&sysCode=' + SYS_CODE);
@@ -208,13 +191,11 @@ function api(sess, url, bodyObj, extraHeaders) {
   });
 }
 
-/* ---------------- 判定 ---------------- */
 function judge(step, r) {
   const d = r.data;
   if (!d) return { state: 'fail', msg: 'HTTP ' + r.http + ' 非 JSON' };
   if (d.errorCode === '100111') return { state: 'expired', msg: '会话失效' };
   if (!d.success) {
-    // 业务性「非失败」：如签到接口对已签到返回 3400002
     if (step.softFail) {
       const soft = step.softFail(d);
       if (soft) return { state: 'ok', msg: soft, data: d };
@@ -230,7 +211,6 @@ function retryable(msg) {
   return /token|权限验证|登录|鉴权/i.test(String(msg || ''));
 }
 
-// 依次尝试主方案与变体；变体可覆盖 url（如签到 V2 → V1 兜底）
 function runStep(sess, step) {
   const variants = [{ label: '', url: step.url, body: step.body, headers: step.headers }].concat(step.fallbacks || []);
   let i = 0;
@@ -253,12 +233,10 @@ function runStep(sess, step) {
   return next();
 }
 
-/* ---------------- 流水线 ---------------- */
 function buildSteps() {
   const dev = deviceId();
   const day = new Date(Date.now() + 8 * 3600 * 1000).getUTCDate();
   const infoBody = { sysCode: 'ESG-CEMP-CORE', optionalColumns: ['usablePoint', 'cycleSub', 'leavePoint'] };
-  // 实测：body.token 必须是固定常量，放会话 id 或不放都会报「权限验证失败,token错误」
   const INFO_FALLBACKS = [{ label: '无token', body: infoBody }];
 
   return [
@@ -271,11 +249,9 @@ function buildSteps() {
     {
       key: 'sign', label: '签到', url: EP.signV2,
       body: {},
-      // 已签到走 3400002「今日已签到~」，属正常态
       softFail: function (d) {
         return /已签到/.test(String(d.errorMessage || '')) ? '今日已签到' : null;
       },
-      // V2 异常时回落到 V1 领取接口
       fallbacks: [{ label: 'V1兜底', url: EP.signV1, body: { comeFrom: 'vioin', channelFrom: 'SFAPP' }, retryOnAny: true }],
       parse: function (d) {
         const o = d.obj || {};
@@ -342,6 +318,7 @@ function runTask() {
   const sess = readSession();
   if (!sess || !sess.sessionId) {
     notify('顺丰任务 · 未配置', '请先打开小程序', '打开小程序「我的 → 积分」页即可自动捕获 sessionId');
+    log('[顺丰][任务] 未配置：存储里没有 sessionId');
     return done();
   }
 
@@ -350,26 +327,32 @@ function runTask() {
   let beforePoint = null;
   let expired = false;
 
+  function pushResult(r) {
+    results.push(r);
+    const icon = { ok: '✅', fail: '❌', skip: '⏭' }[r.state] || '·';
+    log('[顺丰][步骤] ' + icon + ' ' + r.label + '：' + r.msg);
+  }
+
   let chain = Promise.resolve();
   steps.forEach(function (step) {
     chain = chain.then(function () {
       if (expired) return;
-      if (step.skip) { results.push({ label: step.label, state: 'skip', msg: step.skipReason }); return; }
+      if (step.skip) { pushResult({ label: step.label, state: 'skip', msg: step.skipReason }); return; }
 
       return runStep(sess, step).then(function (v) {
         if (v.state === 'expired') {
           expired = true;
-          results.push({ label: step.label, state: 'fail', msg: v.msg });
+          pushResult({ label: step.label, state: 'fail', msg: v.msg });
           return;
         }
-        results.push({ label: step.label, state: v.state, msg: v.msg });
+        pushResult({ label: step.label, state: v.state, msg: v.msg });
 
         if (step.key === 'infoBefore' && v.data) beforePoint = v.data.obj && v.data.obj.usablePoint;
         if (step.key === 'infoAfter' && v.data && typeof beforePoint === 'number') {
           const after = v.data.obj && v.data.obj.usablePoint;
           if (typeof after === 'number') {
             const delta = after - beforePoint;
-            results.push({ label: '积分变化', state: 'ok', msg: (delta >= 0 ? '+' : '') + delta });
+            pushResult({ label: '积分变化', state: 'ok', msg: (delta >= 0 ? '+' : '') + delta });
           }
         }
       });
@@ -384,6 +367,7 @@ function runTask() {
     if (expired) lines.push('⏭ 其余步骤：会话失效后跳过');
 
     if (expired) {
+      log('[顺丰][步骤] ⏭ 其余步骤：会话失效后跳过');
       notify('顺丰任务 · 会话失效', sess.mobile || '',
         '请重新打开小程序积分页，脚本会自动换新 sessionId\n' + lines.join('\n'));
     } else {
@@ -396,7 +380,6 @@ function runTask() {
   });
 }
 
-/* ---------------- 入口 ---------------- */
 if (typeof $request !== 'undefined' && $request && $request.headers) capture();
 else runTask();
 
