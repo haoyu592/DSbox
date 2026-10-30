@@ -9,7 +9,7 @@
 hostname = hope.demogic.com
  
 [rewrite_local]
-^https:\/\/hope\.demogic\.com\/gic-wx-app\/get-member-asset\.json url script-request-header https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
+^https:\/\/hope\.demogic\.com\/gic-wx-app\/(get-member-asset\.json|sign\/member_sign\.json) url script-request-header https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js
  
 [task_local]
 15 9 * * * https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/erke.js, tag=鸿星尔克, enabled=true
@@ -20,7 +20,6 @@ const notify = (() => { try { return $.isNode() ? require('./sendNotify') : null
 
 const API_HOST = 'https://hope.demogic.com';
 const SIGN_PATH = '/gic-wx-app/sign/member_sign.json';           // 旧签到接口（已失效，保留兜底）
-const SIGN_PATH_NEW = '/gic-wx-app/page-custom/member-sign.json'; // 新签到接口（page-custom 路由族）
 const ASSET_PATH = '/gic-wx-app/get-member-asset.json';
 const KEY_erke_data = 'erke_data';
 const KEY = KEY_erke_data;
@@ -92,7 +91,7 @@ function captureRequest() {
   const entry = {
     memberId,
     assetUrl: isAsset ? url : (old.assetUrl || ''),
-    signUrl: isSign ? url.split('?')[0] : (old.signUrl || `${API_HOST}${SIGN_PATH_NEW}`),
+    signUrl: isSign ? url.split('?')[0] : (old.signUrl || `${API_HOST}${SIGN_PATH}`),
     headers,
     params,
   };
@@ -214,13 +213,17 @@ async function runAccount(no, acc) {
       const after = await fetchAsset(no, acc, []);
       if (after && String(after.D021) === '1') {
         lines.push('✅ 签到已生效（接口虽报错，服务端状态为已签到）');
+      } else if (/已过期/.test(lastFail)) {
+        lines.push('⏰ 签名已过期: 抓到的签名超出时效窗口，无法重放');
+        lines.push('💡 请在小程序里点一次签到，脚本会捕获当次请求');
       } else if (/签名/.test(lastFail)) {
-        lines.push('❌ 签到失败: 接口要求动态签名（服务端密钥，离线无法计算）');
-        lines.push('💡 请在小程序里手动签到，让脚本抓到真实请求后自动重放');
+        lines.push('❌ 签到失败: 签名与服务端要求不一致');
+        lines.push('💡 请在小程序里手动签到；如需自动签到必须先捕获当次真实请求');
       } else {
         lines.push(`❌ 签到失败: ${lastFail || '以上接口均未通过'}`);
         lines.push('💡 可先在小程序里手动签到一次');
       }
+      lines.push('⚠️ 今日尚未签到，请手动处理');
       if (after) { pushAsset(lines, after); return; }
     }
 
