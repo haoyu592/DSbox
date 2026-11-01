@@ -1,0 +1,8 @@
+#!name=京东 Cookie 抓取
+#!desc=从京东 App 请求头中静默提取 pt_key/pt_pin，弹窗展示并落盘到 JD_COOKIE_RECENT。需开启 HTTPS 解密。
+
+[MITM]
+hostname = %APPEND% api.m.jd.com
+
+[Script]
+JD_GetCookie = type=http-request, pattern=^https:\/\/api\.m\.jd\.com\/, requires-body=0, script-path=https://raw.githubusercontent.com/haoyu592/DSbox/main/Scripts/JD_GetCookie_App.js, tag=京东Cookie, enable=true
