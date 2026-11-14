@@ -24,6 +24,7 @@ https://raw.githubusercontent.com/leiyiyan/resource/main/subscribe/leiyiyan.boxj
 
 [Script]
 http-response ^https?:\/\/developer\.aliyun\.com\/developer\/api\/my\/user\/getUser script-path=https://raw.githubusercontent.com/leiyiyan/resource/main/script/aliyun_web/aliyun_web.js, requires-body=true, timeout=60, tag=阿里云Web Cookie
+[task_local]
  * 0 7,13 * * * https://raw.githubusercontent.com/leiyiyan/resource/main/script/aliyun_web/aliyun_web.js, tag=阿里云社区日常任务, enabled=true
  
 [MITM]
